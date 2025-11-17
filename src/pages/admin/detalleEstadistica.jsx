@@ -5,6 +5,7 @@ import { jwtDecode } from 'jwt-decode';
 import { LoaderCircle } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import api, { getToken, clearToken } from '../../services/api';
+import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
 
 export default function DetalleEstadistica() {
   const { darkMode } = useTheme();
@@ -81,6 +82,9 @@ export default function DetalleEstadistica() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, location.search]);
+
+  useMobileAutoScrollTop();
+
 
   /* ===================== Helpers ===================== */
   const unwrapJugador = (resData) => {

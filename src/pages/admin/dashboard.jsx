@@ -21,6 +21,7 @@ import {
   Settings,        // Configuración
   CalendarDays     // Agenda de eventos
 } from 'lucide-react';
+import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
 
 const TOKEN_KEY = 'rafc_token';
 
@@ -129,6 +130,9 @@ export default function Dashboard() {
       }
     })();
   }, [navigate]);
+
+  useMobileAutoScrollTop();
+
 
   const handleCerrarSesion = async () => {
     const token = localStorage.getItem(TOKEN_KEY);

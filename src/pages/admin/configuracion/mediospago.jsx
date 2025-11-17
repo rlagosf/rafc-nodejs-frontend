@@ -5,6 +5,7 @@ import { jwtDecode } from 'jwt-decode';
 import api, { getToken, clearToken } from '../../../services/api';
 import { useTheme } from '../../../context/ThemeContext';
 import Modal from '../../../components/modal';
+import { useMobileAutoScrollTop } from '../../../hooks/useMobileScrollTop';
 
 export default function MediosPago() {
   const { darkMode } = useTheme();
@@ -40,6 +41,9 @@ export default function MediosPago() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
+
+  useMobileAutoScrollTop();
+
 
   // 🔐 Auth (solo admin = 1) con rafc_token gestionado por getToken/clearToken
   useEffect(() => {
@@ -93,10 +97,10 @@ export default function MediosPago() {
     throw new Error('ENDPOINT_VARIANTS_FAILED');
   };
 
-  const getVar  = withVariants((u, cfg) => api.get(u, cfg));
+  const getVar = withVariants((u, cfg) => api.get(u, cfg));
   const postVar = withVariants((u, payload, cfg) => api.post(u, payload, cfg));
-  const putVar  = withVariants((u, payload, cfg) => api.put(u, payload, cfg));
-  const delVar  = withVariants((u, cfg) => api.delete(u, cfg));
+  const putVar = withVariants((u, payload, cfg) => api.put(u, payload, cfg));
+  const delVar = withVariants((u, cfg) => api.delete(u, cfg));
 
   // ───────── Fetch ─────────
   const fetchMedios = async () => {

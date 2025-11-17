@@ -6,7 +6,7 @@ import { useTheme } from '../../context/ThemeContext';
 import api, { getToken, clearToken } from '../../services/api';
 import IsLoading from '../../components/isLoading';
 import { FileText } from 'lucide-react';
-
+import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -111,6 +111,9 @@ export default function VerConvocacionHistorica() {
       });
     }
   }, [location.pathname, navigate]);
+
+  useMobileAutoScrollTop();
+
 
   // Auth
   useEffect(() => {

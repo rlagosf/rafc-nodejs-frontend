@@ -6,6 +6,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { Pencil } from 'lucide-react';
 import { jwtDecode } from 'jwt-decode';
 import IsLoading from '../../components/isLoading';
+import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
 
 export default function ListarEstadisticas() {
   const { darkMode } = useTheme();
@@ -30,6 +31,9 @@ export default function ListarEstadisticas() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, location.search]);
+
+  useMobileAutoScrollTop();
+
 
   // ───────────────── Auth ─────────────────
   useEffect(() => {

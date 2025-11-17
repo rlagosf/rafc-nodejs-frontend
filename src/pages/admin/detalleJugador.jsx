@@ -15,6 +15,7 @@ import {
 import IsLoading from '../../components/isLoading';
 import { jwtDecode } from 'jwt-decode';
 import api, { getToken, clearToken } from '../../services/api';
+import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
 
 ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
@@ -115,6 +116,9 @@ export default function DetalleJugador() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, location.search]);
+
+  useMobileAutoScrollTop();
+
 
   const css = {
     fondo: darkMode ? 'bg-[#111827] text-white' : 'bg-white text-[#1d0b0b]',

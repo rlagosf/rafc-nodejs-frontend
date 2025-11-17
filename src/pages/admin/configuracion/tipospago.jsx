@@ -5,6 +5,7 @@ import { jwtDecode } from 'jwt-decode';
 import api, { getToken, clearToken } from '../../../services/api';
 import { useTheme } from '../../../context/ThemeContext';
 import Modal from '../../../components/modal';
+import { useMobileAutoScrollTop } from '../../../hooks/useMobileScrollTop';
 
 export default function TiposPago() {
   const { darkMode } = useTheme();
@@ -40,8 +41,11 @@ export default function TiposPago() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
-
+  
   // 🔐 Auth (solo admin = 1) con getToken/clearToken
+
+  useMobileAutoScrollTop();
+
   useEffect(() => {
     try {
       const token = getToken();

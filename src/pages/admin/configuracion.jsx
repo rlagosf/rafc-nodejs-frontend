@@ -16,6 +16,7 @@ import {
   Building2       // Sucursales
 } from 'lucide-react';
 import { getToken, clearToken } from '../../services/api';
+import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
 
 export default function Configuracion() {
   const { darkMode } = useTheme();
@@ -48,6 +49,9 @@ export default function Configuracion() {
       navigate('/login', { replace: true });
     }
   }, [navigate]);
+
+  useMobileAutoScrollTop();
+
 
   // 🎨 Estilos según tema (alineados al dashboard)
   const estiloFondo = darkMode ? 'bg-[#111827] text-white' : 'bg-white text-[#1d0b0b]';

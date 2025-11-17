@@ -5,6 +5,7 @@ import { useTheme } from '../../context/ThemeContext';
 import api, { getToken, clearToken } from '../../services/api';
 import IsLoading from '../../components/isLoading';
 import { jwtDecode } from 'jwt-decode';
+import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
 
 export default function ListarJugadores() {
   const { darkMode } = useTheme();
@@ -29,6 +30,9 @@ export default function ListarJugadores() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, location.search]);
+
+  useMobileAutoScrollTop();
+
 
   // 🔐 Validación de sesión/rol
   useEffect(() => {

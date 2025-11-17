@@ -4,6 +4,7 @@ import { useTheme } from '../../context/ThemeContext';
 import api, { getToken, clearToken } from '../../services/api';
 import IsLoading from '../../components/isLoading';
 import { jwtDecode } from 'jwt-decode';
+import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
 
 export default function Pagos() {
   const { darkMode } = useTheme();
@@ -60,6 +61,9 @@ export default function Pagos() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPath]);
+
+  useMobileAutoScrollTop();
+
 
   const [form, setForm] = useState({
     tipo_pago_id: '',

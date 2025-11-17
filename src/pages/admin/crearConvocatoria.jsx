@@ -6,6 +6,7 @@ import api, { getToken, clearToken } from "../../services/api";
 import IsLoading from "../../components/isLoading";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
 // ───────── helpers ─────────
 const toArray = (resp) => {
@@ -84,6 +85,9 @@ export default function CrearConvocatorias() {
       navigate("/login", { replace: true });
     }
   }, [navigate]);
+
+  useMobileAutoScrollTop();
+
 
   // Load
   useEffect(() => {

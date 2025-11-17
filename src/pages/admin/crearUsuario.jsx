@@ -5,6 +5,7 @@ import { jwtDecode } from 'jwt-decode';
 import { useTheme } from '../../context/ThemeContext';
 import api, { getToken, clearToken } from '../../services/api';
 import IsLoading from '../../components/isLoading';
+import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
 
 const asArrayRoles = (resp) => {
   const d = resp?.data ?? resp;
@@ -74,6 +75,9 @@ export default function CrearUsuario() {
       navigate('/login', { replace: true });
     }
   }, [navigate]);
+
+  useMobileAutoScrollTop();
+
 
   // Carga robusta de roles
   useEffect(() => {

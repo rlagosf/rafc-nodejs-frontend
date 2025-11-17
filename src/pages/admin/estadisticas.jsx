@@ -15,6 +15,7 @@ import api, { getToken, clearToken } from '../../services/api';
 import { useTheme } from '../../context/ThemeContext';
 import IsLoading from '../../components/isLoading';
 import { jwtDecode } from 'jwt-decode';
+import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
 
 Chart.register(ArcElement, Tooltip, Legend, BarElement, CategoryScale, LinearScale);
 
@@ -151,6 +152,9 @@ export default function EstadisticasGlobales() {
       navigate('/login', { replace: true });
     }
   }, [navigate]);
+
+  useMobileAutoScrollTop();
+
 
   /* ───────────────── Helpers de fetch tolerantes ───────────────── */
   const normalizeListResponse = (res) => {

@@ -11,6 +11,7 @@ import esES from 'date-fns/locale/es';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
 
 const TOKEN_KEY = 'rafc_token';
 const THEME = '#e82d89';
@@ -222,6 +223,9 @@ export default function Agenda() {
       }
     })();
   }, [navigate]);
+
+  useMobileAutoScrollTop();
+
 
   // Carga de eventos
   useEffect(() => {

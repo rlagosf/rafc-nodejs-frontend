@@ -4,6 +4,7 @@ import { useTheme } from '../../context/ThemeContext';
 import IsLoading from '../../components/isLoading';
 import api, { getToken, clearToken } from '../../services/api';
 import { jwtDecode } from 'jwt-decode';
+import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
 
 /* ─────────── Helpers ─────────── */
 const asList = (raw) => {
@@ -115,6 +116,9 @@ export default function ListarPagos() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, location.search]);
+
+  useMobileAutoScrollTop();
+
 
   /* 🔐 Autenticación y roles */
   useEffect(() => {

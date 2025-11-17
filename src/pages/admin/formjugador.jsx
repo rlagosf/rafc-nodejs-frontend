@@ -5,6 +5,7 @@ import { useTheme } from '../../context/ThemeContext';
 import api, { getToken, clearToken } from '../../services/api';
 import IsLoading from '../../components/isLoading';
 import { jwtDecode } from 'jwt-decode';
+import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
 
 /* ───────── Helpers robustos ───────── */
 const asList = (raw) => {
@@ -115,6 +116,9 @@ export default function FormJugador() {
       navigate('/login', { replace: true });
     }
   }, [navigate]);
+
+  useMobileAutoScrollTop();
+
 
   /* ───────── Cargar catálogos (resistente) ───────── */
   useEffect(() => {

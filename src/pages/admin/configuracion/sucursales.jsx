@@ -5,6 +5,7 @@ import { jwtDecode } from 'jwt-decode';
 import api, { getToken, clearToken } from '../../../services/api';
 import { useTheme } from '../../../context/ThemeContext';
 import Modal from '../../../components/modal';
+import { useMobileAutoScrollTop } from '../../../hooks/useMobileScrollTop';
 
 export default function Sucursales() {
   const { darkMode } = useTheme();
@@ -40,6 +41,9 @@ export default function Sucursales() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
+
+  useMobileAutoScrollTop();
+
 
   // 🔐 Auth admin=1 con getToken/clearToken
   useEffect(() => {

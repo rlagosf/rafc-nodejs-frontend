@@ -8,6 +8,7 @@ import { Bar } from 'react-chartjs-2';
 import IsLoading from '../../components/isLoading';
 import { jwtDecode } from 'jwt-decode';
 import { Pencil, Trash2, X } from 'lucide-react';
+import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
 
 Chart.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
@@ -74,6 +75,9 @@ export default function Pagos() {
       navigate('/login', { replace: true });
     }
   }, [navigate]);
+
+  useMobileAutoScrollTop();
+
 
   // ─────────────── Helpers de fetch tolerantes ───────────────
   const normalizeListResponse = (res) => {
