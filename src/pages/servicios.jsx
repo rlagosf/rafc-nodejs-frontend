@@ -17,19 +17,18 @@ const programas = [
   {
     titulo: "COMPETITIVO (13–16 años)",
     descripcion:
-      "Entrenamientos de alta intensidad enfocados en rendimiento y proyección. Mentalidad, estrategia y cohesión de equipo.",
+      " Entrenamientos de alta exigencia, con roles y funciones específicas por posición, preparación física más avanzada y partidos de mayor nivel. Se perfecciona la técnica, se optimiza la toma de decisiones en situaciones reales de juego y se potencia el rendimiento integral del jugador.",
     imagenes: ["/images/foto-real-facup-59.webp", "/images/foto-real-facup-62.webp", "/images/foto-real-facup-60.webp"],
   },
   {
     titulo: "PROYECCIÓN (17+ años)",
     descripcion:
-      "Preparamos jugadores para pruebas en clubes y selecciones. Trabajo físico, técnico y mental de nivel avanzado.",
-    imagenes: ["/images/foto-real-facup-63.webp", "/images/foto-real-facup-64.webp", "/images/foto-real-facup-58.webp"],
+      " Programa orientado a jugadores que buscan dar el salto. Se entregan herramientas de alto rendimiento, análisis táctico, y preparación física específica, potenciando al máximo las capacidades individuales y grupales.", imagenes: ["/images/foto-real-facup-63.webp", "/images/foto-real-facup-64.webp", "/images/foto-real-facup-58.webp"],
   },
   {
     titulo: "ADULTOS (+18 años)",
     descripcion:
-      "Espacio formativo y recreativo: fútbol con enfoque en salud, bienestar y disfrute competitivo en un ambiente humano.",
+      " Entrenamientos diseñados para equilibrar salud, recreación y rendimiento competitivo. Se refuerzan aspectos técnicos y tácticos aplicados al juego real, favoreciendo tanto la mejora personal como la experiencia grupal.",
     imagenes: ["/images/foto-real-facup-25.webp", "/images/foto-real-facup-24.webp", "/images/foto-real-facup-35.webp"],
   },
 ];
@@ -129,24 +128,74 @@ export default function Servicios() {
 
       {/* === Grilla de beneficios === */}
       <div className="w-full">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8 max-w-5xl mx-auto place-items-stretch">
-          {beneficios.map((b, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.1 }}
-              transition={{ duration: 0.6, delay: i * 0.1 }}
-              className="relative border border-fucsia-ra rounded-xl overflow-hidden bg-black/50 
-                         hover:shadow-lg hover:shadow-fucsia-ra/40 transition duration-300
-                         flex flex-col items-center justify-center text-center h-[240px]"
-            >
-              <span className="text-7xl mb-8 z-10">{b.icono}</span>
-              <h4 className="text-base md:text-lg font-semibold text-fucsia-ra z-10 px-3">
-                {b.titulo}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+
+          {/* --- Psicología Deportiva --- */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.1 }}
+            transition={{ duration: 0.6, delay: 0 }}
+            className="relative rounded-xl overflow-hidden border border-fucsia-ra 
+                 shadow-md hover:shadow-fucsia-ra/40 transition-all duration-300 h-[240px]"
+          >
+            <img
+              src="/PSICOLOGIA.png"
+              alt="Psicología Deportiva"
+              className="absolute inset-0 w-full h-full object-cover opacity-80 
+                   transition-transform duration-500 hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+              <h4 className="text-xl font-semibold text-fucsia-ra text-center px-4">
+                Psicología Deportiva
               </h4>
-            </motion.div>
-          ))}
+            </div>
+          </motion.div>
+
+          {/* --- Preparación Física --- */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.1 }}
+            transition={{ duration: 0.6, delay: 0.1 }}
+            className="relative rounded-xl overflow-hidden border border-fucsia-ra 
+                 shadow-md hover:shadow-fucsia-ra/40 transition-all duration-300 h-[240px]"
+          >
+            <img
+              src="/PREPARACION_FISICA.png"
+              alt="Preparación Física"
+              className="absolute inset-0 w-full h-full object-cover opacity-80 
+                   transition-transform duration-500 hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+              <h4 className="text-xl font-semibold text-fucsia-ra text-center px-4">
+                Preparación Física
+              </h4>
+            </div>
+          </motion.div>
+
+          {/* --- Kinesiología --- */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.1 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="relative rounded-xl overflow-hidden border border-fucsia-ra 
+                 shadow-md hover:shadow-fucsia-ra/40 transition-all duration-300 h-[240px]"
+          >
+            <img
+              src="/KINESIOLOGIA.png"
+              alt="Kinesiología"
+              className="absolute inset-0 w-full h-full object-cover opacity-80 
+                   transition-transform duration-500 hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+              <h4 className="text-xl font-semibold text-fucsia-ra text-center px-4">
+                Kinesiología
+              </h4>
+            </div>
+          </motion.div>
+
         </div>
       </div>
     </motion.section>
