@@ -6,6 +6,8 @@ import api, { getToken, clearToken } from '../../services/api';
 import IsLoading from '../../components/isLoading';
 import { jwtDecode } from 'jwt-decode';
 import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
+// 🆕 helper para mostrar RUT con dígito verificador (solo front)
+import { formatRutWithDV } from '../../services/rut';
 
 export default function ListarJugadores() {
   const { darkMode } = useTheme();
@@ -32,7 +34,6 @@ export default function ListarJugadores() {
   }, [location.pathname, location.search]);
 
   useMobileAutoScrollTop();
-
 
   // 🔐 Validación de sesión/rol
   useEffect(() => {
@@ -95,7 +96,8 @@ export default function ListarJugadores() {
       setError('');
 
       try {
-        const jugadoresPaths = rol === 2 ? ['/jugadores/staff', '/jugadores'] : ['/jugadores'];
+        const jugadoresPaths =
+          rol === 2 ? ['/jugadores/staff', '/jugadores'] : ['/jugadores'];
         const rawJugadores = await tryGetList(jugadoresPaths);
 
         const [posList, catList, estList] = await Promise.all([
@@ -106,22 +108,46 @@ export default function ListarJugadores() {
 
         if (!alive) return;
 
-        const posMap = new Map((posList ?? []).map(p => [Number(p.id ?? p.posicion_id), p.nombre ?? p.descripcion ?? '']));
-        const catMap = new Map((catList ?? []).map(c => [Number(c.id ?? c.categoria_id), c.nombre ?? c.descripcion ?? '']));
-        const estMap = new Map((estList ?? []).map(e => [Number(e.id ?? e.estado_id), e.nombre ?? e.descripcion ?? '']));
+        const posMap = new Map(
+          (posList ?? []).map((p) => [
+            Number(p.id ?? p.posicion_id),
+            p.nombre ?? p.descripcion ?? '',
+          ])
+        );
+        const catMap = new Map(
+          (catList ?? []).map((c) => [
+            Number(c.id ?? c.categoria_id),
+            c.nombre ?? c.descripcion ?? '',
+          ])
+        );
+        const estMap = new Map(
+          (estList ?? []).map((e) => [
+            Number(e.id ?? e.estado_id),
+            e.nombre ?? e.descripcion ?? '',
+          ])
+        );
 
         const safeJugadores = Array.isArray(rawJugadores) ? rawJugadores : [];
-        const data = safeJugadores.map(j => {
-          const catObj =
-            j.categoria
-              ? j.categoria
-              : (catMap.has(Number(j.categoria_id)) ? { nombre: catMap.get(Number(j.categoria_id)) } : null);
+        const data = safeJugadores.map((j) => {
+          const catObj = j.categoria
+            ? j.categoria
+            : catMap.has(Number(j.categoria_id))
+            ? { nombre: catMap.get(Number(j.categoria_id)) }
+            : null;
 
           return {
             ...j,
-            posicion: j.posicion ?? (posMap.has(Number(j.posicion_id)) ? { nombre: posMap.get(Number(j.posicion_id)) } : null),
-            categoria: catObj, // <- se usa para agrupar (no se mostrará como columna)
-            estado:    j.estado    ?? (estMap.has(Number(j.estado_id))     ? { nombre: estMap.get(Number(j.estado_id)) }     : null),
+            posicion:
+              j.posicion ??
+              (posMap.has(Number(j.posicion_id))
+                ? { nombre: posMap.get(Number(j.posicion_id)) }
+                : null),
+            categoria: catObj,
+            estado:
+              j.estado ??
+              (estMap.has(Number(j.estado_id))
+                ? { nombre: estMap.get(Number(j.estado_id)) }
+                : null),
           };
         });
 
@@ -140,7 +166,9 @@ export default function ListarJugadores() {
       }
     })();
 
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [rol, navigate]);
 
   // 🎨 clases
@@ -155,7 +183,8 @@ export default function ListarJugadores() {
     navigate(`/admin/detalle-jugador/${encodeURIComponent(rut)}`, {
       state: {
         from: '/admin/listar-jugadores',
-        breadcrumb: stateBreadcrumb ?? [{ label: 'Listar Jugadores', to: '/admin/listar-jugadores' }],
+        breadcrumb:
+          stateBreadcrumb ?? [{ label: 'Listar Jugadores', to: '/admin/listar-jugadores' }],
       },
     });
 
@@ -183,10 +212,8 @@ export default function ListarJugadores() {
 
   return (
     <div className={`${fondoClase} px-2 sm:px-4 pt-4 pb-16 font-realacademy`}>
-      {/* El layout pinta el breadcrumb: Inicio / Listar Jugadores */}
       <h2 className="text-2xl font-bold mb-6 text-center">Lista de Jugadores</h2>
 
-      {/* Tarjetas por categoría */}
       {grupos.length === 0 ? (
         <div className={`${tarjetaClase}`}>
           <p className="text-center text-gray-400 py-4">No hay jugadores registrados.</p>
@@ -195,7 +222,9 @@ export default function ListarJugadores() {
         <div className="space-y-6">
           {grupos.map(([categoriaNombre, lista]) => (
             <div key={categoriaNombre} className={`${tarjetaClase}`}>
-              <h3 className="text-xl font-semibold mb-3 text-center">Categoría {categoriaNombre}</h3>
+              <h3 className="text-xl font-semibold mb-3 text-center">
+                Categoría {categoriaNombre}
+              </h3>
 
               <div className="w-full overflow-x-auto">
                 <table className="w-full text-xs sm:text-sm min-w-[820px]">
@@ -211,29 +240,48 @@ export default function ListarJugadores() {
                     </tr>
                   </thead>
                   <tbody>
-                    {lista.map((jugador) => (
-                      <tr
-                        key={jugador.rut_jugador ?? jugador.id}
-                        className={`${filaHover} cursor-pointer`}
-                        onClick={() => handleClick(jugador.rut_jugador, location.state?.breadcrumb)}
-                      >
-                        <td className="p-2 border text-center">{jugador.nombre_jugador}</td>
-                        <td className="p-2 border text-center">{jugador.rut_jugador}</td>
-                        <td className="p-2 border text-center">{jugador.edad ?? '-'}</td>
-                        <td className="p-2 border text-center">{jugador.telefono ?? '-'}</td>
-                        <td className="p-2 border text-center break-all">{jugador.email ?? '-'}</td>
-                        <td className="p-2 border text-center">
-                          {jugador.posicion?.nombre ?? jugador.posicion_id ?? '-'}
-                        </td>
-                        <td className="p-2 border text-center">
-                          {jugador.estado?.nombre ?? jugador.estado_id ?? '-'}
-                        </td>
-                      </tr>
-                    ))}
+                    {lista.map((jugador) => {
+                      const rutCrudo = jugador.rut_jugador ?? jugador.id ?? null;
+                      const rutFormateado = rutCrudo
+                        ? formatRutWithDV(rutCrudo)
+                        : '-';
+
+                      return (
+                        <tr
+                          key={jugador.rut_jugador ?? jugador.id}
+                          className={`${filaHover} cursor-pointer`}
+                          onClick={() =>
+                            handleClick(jugador.rut_jugador, location.state?.breadcrumb)
+                          }
+                        >
+                          <td className="p-2 border text-center">
+                            {jugador.nombre_jugador}
+                          </td>
+                          {/* 🆕 RUT sólo decorativo: cuerpo + DV */}
+                          <td className="p-2 border text-center">
+                            {rutFormateado || rutCrudo || '-'}
+                          </td>
+                          <td className="p-2 border text-center">
+                            {jugador.edad ?? '-'}
+                          </td>
+                          <td className="p-2 border text-center">
+                            {jugador.telefono ?? '-'}
+                          </td>
+                          <td className="p-2 border text-center break-all">
+                            {jugador.email ?? '-'}
+                          </td>
+                          <td className="p-2 border text-center">
+                            {jugador.posicion?.nombre ?? jugador.posicion_id ?? '-'}
+                          </td>
+                          <td className="p-2 border text-center">
+                            {jugador.estado?.nombre ?? jugador.estado_id ?? '-'}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
-
             </div>
           ))}
         </div>

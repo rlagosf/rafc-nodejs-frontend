@@ -7,6 +7,7 @@ import { Pencil } from 'lucide-react';
 import { jwtDecode } from 'jwt-decode';
 import IsLoading from '../../components/isLoading';
 import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
+import { formatRutWithDV } from '../../services/rut'; // ✅ solo frontend
 
 export default function ListarEstadisticas() {
   const { darkMode } = useTheme();
@@ -33,7 +34,6 @@ export default function ListarEstadisticas() {
   }, [location.pathname, location.search]);
 
   useMobileAutoScrollTop();
-
 
   // ───────────────── Auth ─────────────────
   useEffect(() => {
@@ -162,7 +162,7 @@ export default function ListarEstadisticas() {
     return nombre || 'Sin categoría';
   };
 
-  // Normalizador de jugadores
+  // Normalizador de jugadores (+ RUT con DV solo para mostrar)
   const jugadores = useMemo(() => {
     const toNombre = (j) =>
       j?.nombre_jugador ||
@@ -173,15 +173,18 @@ export default function ListarEstadisticas() {
 
     const base = Array.isArray(jugadoresRaw) ? jugadoresRaw : [];
     return base.map((j, idx) => {
-      const rut =
+      const rutBase =
         j?.rut_jugador ??
         j?.rut ??
         j?.rutJugador ??
         j?.id ??
         `tmp-${idx}`;
 
+      const rutStr = String(rutBase);
+
       return {
-        rut,
+        rut: rutStr,                         // 🔹 lo que sigue usando el backend
+        rutConDV: formatRutWithDV(rutStr),   // 🔹 solo para mostrar
         nombre: toNombre(j),
         categoriaNombre: toCategoria(j),
       };
@@ -197,11 +200,10 @@ export default function ListarEstadisticas() {
       map.get(cat).push(j);
     }
 
-    // Orden categories por categoriaOrder y "Sin categoría" al final
     const entries = [...map.entries()];
     entries.sort((a, b) => {
-      const [na, la] = a;
-      const [nb, lb] = b;
+      const [na] = a;
+      const [nb] = b;
       if (na === 'Sin categoría' && nb !== 'Sin categoría') return 1;
       if (nb === 'Sin categoría' && na !== 'Sin categoría') return -1;
       const ia = categoriaOrder.has(na) ? categoriaOrder.get(na) : Number.MAX_SAFE_INTEGER;
@@ -209,10 +211,9 @@ export default function ListarEstadisticas() {
       return ia - ib || na.localeCompare(nb, 'es');
     });
 
-    // Ordenar jugadores dentro de cada grupo por nombre
     return entries.map(([cat, list]) => ({
       categoria: cat,
-      items: [...list].sort((x, y) => x.nombre.localeCompare(y.nombre, 'es'))
+      items: [...list].sort((x, y) => x.nombre.localeCompare(y.nombre, 'es')),
     }));
   }, [jugadores, categoriaOrder]);
 
@@ -249,7 +250,9 @@ export default function ListarEstadisticas() {
                 <h3 className="text-lg font-bold">
                   {categoria}
                 </h3>
-                <span className="text-xs opacity-70">{items.length} jugador{items.length !== 1 ? 'es' : ''}</span>
+                <span className="text-xs opacity-70">
+                  {items.length} jugador{items.length !== 1 ? 'es' : ''}
+                </span>
               </header>
 
               <div className="w-full overflow-x-auto">
@@ -264,8 +267,13 @@ export default function ListarEstadisticas() {
                   <tbody>
                     {items.map((j) => (
                       <tr key={String(j.rut)} className={`${filaHover}`}>
-                        <td className="p-2 border text-center break-all">{j.rut}</td>
-                        <td className="p-2 border text-center break-words">{j.nombre}</td>
+                        {/* ✅ Mostramos RUT con dígito verificador */}
+                        <td className="p-2 border text-center break-all">
+                          {j.rutConDV}
+                        </td>
+                        <td className="p-2 border text-center break-words">
+                          {j.nombre}
+                        </td>
                         <td className="p-2 border text-center">
                           <button
                             onClick={() =>

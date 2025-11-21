@@ -1,3 +1,4 @@
+// src/pages/admin/crearConvocatoria.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
@@ -8,7 +9,9 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
-// ---------- Helpers ----------
+/* =======================================================
+   Helpers
+======================================================= */
 const toArray = (resp) => {
   const d = resp?.data ?? resp ?? [];
   if (Array.isArray(d)) return d;
@@ -46,7 +49,9 @@ const dateOnly = (d) => {
   return new Date(x.getFullYear(), x.getMonth(), x.getDate());
 };
 
-// ---------- componente ----------
+/* =======================================================
+   Componente principal
+======================================================= */
 export default function CrearConvocatorias() {
   const { darkMode } = useTheme();
   const navigate = useNavigate();
@@ -59,7 +64,11 @@ export default function CrearConvocatorias() {
   const [mostrarModal, setMostrarModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // ---------- Auth ----------
+  // ✅ guardamos la info base para el histórico
+  const [convocatoriaInfo, setConvocatoriaInfo] = useState(null);
+  // { evento_id: number, convocatoria_id: number }
+
+  /* ==================== Auth ==================== */
   useEffect(() => {
     try {
       const token = getToken();
@@ -79,7 +88,7 @@ export default function CrearConvocatorias() {
 
   useMobileAutoScrollTop();
 
-  // ---------- Load ----------
+  /* ==================== Load ==================== */
   useEffect(() => {
     const abort = new AbortController();
 
@@ -119,7 +128,7 @@ export default function CrearConvocatorias() {
     return () => abort.abort();
   }, [navigate]);
 
-  // ---------- Mappers ----------
+  /* ==================== Mappers ==================== */
   const catMap = useMemo(
     () => new Map(categorias.map((c) => [Number(c.id), c.nombre])),
     [categorias]
@@ -136,7 +145,9 @@ export default function CrearConvocatorias() {
       const nombre =
         j?.nombre_jugador ??
         j?.nombre_completo ??
-        (j?.nombres && j?.apellidos ? `${j.nombres} ${j.apellidos}` : j?.nombre) ??
+        (j?.nombres && j?.apellidos
+          ? `${j.nombres} ${j.apellidos}`
+          : j?.nombre) ??
         "—";
 
       return {
@@ -148,7 +159,7 @@ export default function CrearConvocatorias() {
     });
   }, [jugadoresRaw, catMap]);
 
-  // ---------- Eventos futuros ----------
+  /* ==================== Eventos futuros ==================== */
   const today = dateOnly(new Date());
 
   const eventosFuturos = useMemo(() => {
@@ -161,12 +172,16 @@ export default function CrearConvocatorias() {
   const fechasDisponibles = useMemo(
     () =>
       Array.from(
-        new Set(eventosFuturos.map((e) => String(e?.fecha_inicio ?? e?.fecha).slice(0, 10)))
+        new Set(
+          eventosFuturos.map((e) =>
+            String(e?.fecha_inicio ?? e?.fecha).slice(0, 10)
+          )
+        )
       ).sort(),
     [eventosFuturos]
   );
 
-  // ---------- Handlers ----------
+  /* ==================== Handlers ==================== */
   const handleFechaChange = (key, fecha) => {
     const ev = eventosFuturos.find(
       (e) => String(e?.fecha_inicio ?? e?.fecha).slice(0, 10) === fecha
@@ -215,7 +230,7 @@ export default function CrearConvocatorias() {
     }));
   };
 
-  // ---------- Guardar ----------
+  /* ==================== Guardar convocatorias ==================== */
   const guardarConvocatorias = async () => {
     setError("");
 
@@ -223,38 +238,64 @@ export default function CrearConvocatorias() {
       const datosEnviar = jugadores
         .map((j) => {
           const d = convocatorias[j._key];
-          if (!d.fecha_partido || !d.evento_id) return null;
+          if (!d?.fecha_partido || !d?.evento_id) return null;
+
           return {
             jugador_rut: j.rut_jugador,
             fecha_partido: d.fecha_partido,
             evento_id: Number(d.evento_id),
-            asistio: d.asistio,
-            titular: d.titular,
+            asistio: !!d.asistio,
+            titular: !!d.titular,
             observaciones: d.observaciones || null,
           };
         })
         .filter(Boolean);
 
-      if (!datosEnviar.length)
-        return setError("⚠️ Debe seleccionar al menos un evento.");
+      if (!datosEnviar.length) {
+        setError("⚠️ Debe seleccionar al menos un evento.");
+        return;
+      }
 
-      if (!datosEnviar.some((d) => d.asistio))
-        return setError("⚠️ Marque asistencia de al menos 1 jugador.");
+      if (!datosEnviar.some((d) => d.asistio)) {
+        setError("⚠️ Marque asistencia de al menos 1 jugador.");
+        return;
+      }
 
-      await api.post("/convocatorias/", datosEnviar);
+      // Guardar convocatorias → backend genera convocatoria_id
+      const resp = await api.post("/convocatorias/", datosEnviar);
+
+      const eventoIdBackend =
+        resp?.data?.evento_id ?? datosEnviar[0].evento_id;
+      const convIdBackend = resp?.data?.convocatoria_id;
+
+      if (!convIdBackend) {
+        throw new Error("Backend no retornó convocatoria_id");
+      }
+
+      setConvocatoriaInfo({
+        evento_id: Number(eventoIdBackend),
+        convocatoria_id: Number(convIdBackend),
+      });
+
       setMostrarModal(true);
-    } catch {
+    } catch (err) {
+      console.error(err);
       setError("❌ Error al guardar convocatorias");
     }
   };
 
-  // ---------- PDF + Histórico ----------
+  /* ==================== Generar PDF + Histórico ==================== */
   const generarListado = async () => {
     try {
+      if (!convocatoriaInfo) {
+        alert("❌ No hay información de convocatoria base. Guarde primero.");
+        return;
+      }
+
       const convocados = jugadores
         .map((j) => {
           const d = convocatorias[j._key];
-          if (!(d.asistio && d.evento_id)) return null;
+          if (!(d?.asistio && d?.evento_id)) return null;
 
           return {
             ...d,
@@ -265,10 +306,11 @@ export default function CrearConvocatorias() {
         })
         .filter(Boolean);
 
-      if (!convocados.length)
-        return alert("⚠️ No hay jugadores asistentes.");
+      if (!convocados.length) {
+        alert("⚠️ No hay jugadores asistentes.");
+        return;
+      }
 
-      // PDF
       const doc = new jsPDF({
         unit: "mm",
         format: [330, 216],
@@ -288,13 +330,15 @@ export default function CrearConvocatorias() {
 
       const base64 = doc.output("datauristring").split(",")[1];
 
+      // Registrar histórico con evento_id + convocatoria_id (OBLIGATORIOS)
       await api.post("/convocatorias-historico", {
-        evento_id: Number(convocados[0].evento_id),
+        evento_id: convocatoriaInfo.evento_id,
+        convocatoria_id: convocatoriaInfo.convocatoria_id,
         fecha_generacion: new Date().toISOString(),
         listado_base64: base64,
       });
 
-      // reset
+      // Reset total
       const init = {};
       jugadores.forEach((j, idx) => {
         init[jugadorKey(j, idx)] = {
@@ -305,16 +349,19 @@ export default function CrearConvocatorias() {
           observaciones: "",
         };
       });
-      setConvocatorias(init);
 
+      setConvocatorias(init);
+      setConvocatoriaInfo(null);
       setMostrarModal(false);
+
       alert("Listado generado y guardado en el histórico.");
-    } catch {
+    } catch (err) {
+      console.error(err);
       alert("❌ Error al generar el PDF");
     }
   };
 
-  // ---------- UI ----------
+  /* ==================== UI ==================== */
   const fondoClase = darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]";
   const tablaCabecera = darkMode ? "bg-[#1f2937] text-white" : "bg-gray-100 text-[#1d0b0b]";
   const filaHover = darkMode ? "hover:bg-[#1f2937]" : "hover:bg-gray-100";
@@ -325,7 +372,7 @@ export default function CrearConvocatorias() {
     ? "bg-[#374151] text-white border border-gray-600"
     : "bg-gray-50 text-black border border-gray-300";
 
-  // ---------- Agrupar ----------
+  /* ==================== Agrupar por categorías ==================== */
   const grupos = useMemo(() => {
     const m = new Map();
     jugadores.forEach((j) => {
@@ -335,7 +382,7 @@ export default function CrearConvocatorias() {
     return [...m.entries()].sort(([a], [b]) => a.localeCompare(b));
   }, [jugadores]);
 
-  // ---------- Render ----------
+  /* ==================== Render ==================== */
   if (isLoading) return <IsLoading />;
 
   return (
@@ -350,7 +397,6 @@ export default function CrearConvocatorias() {
       <div className="space-y-6">
         {grupos.map(([categoria, lista]) => (
           <div key={categoria} className={tarjetaClase}>
-
             <h3 className="text-xl font-semibold mb-3 text-center">
               Categoría {categoria}
             </h3>
@@ -370,7 +416,13 @@ export default function CrearConvocatorias() {
 
                 <tbody>
                   {lista.map((j) => {
-                    const row = convocatorias[j._key];
+                    const row = convocatorias[j._key] || {
+                      fecha_partido: "",
+                      evento_id: "",
+                      asistio: false,
+                      titular: false,
+                      observaciones: "",
+                    };
 
                     return (
                       <tr key={j._key} className={filaHover}>
@@ -386,9 +438,7 @@ export default function CrearConvocatorias() {
                           >
                             <option value="">Seleccionar fecha</option>
                             {fechasDisponibles.map((f) => (
-                              <option key={f} value={f}>
-                                {f}
-                              </option>
+                              <option key={f} value={f}>{f}</option>
                             ))}
                           </select>
                         </td>
@@ -411,7 +461,7 @@ export default function CrearConvocatorias() {
                         <td className="p-2 border text-center">
                           <input
                             type="checkbox"
-                            checked={row.asistio}
+                            checked={!!row.asistio}
                             onChange={(e) => handleAsistencia(j._key, e.target.checked)}
                           />
                         </td>
@@ -447,11 +497,7 @@ export default function CrearConvocatorias() {
 
       {mostrarModal && (
         <div className="fixed inset-0 flex justify-center items-center bg-black bg-opacity-50 z-50">
-          <div
-            className={`${
-              darkMode ? "bg-[#1f2937] text-white" : "bg-white"
-            } p-6 rounded-lg shadow-lg text-center`}
-          >
+          <div className={`${darkMode ? "bg-[#1f2937] text-white" : "bg-white"} p-6 rounded-lg shadow-lg text-center`}>
             <h2 className="text-xl font-bold mb-4">✅ Convocatoria creada</h2>
 
             <button
@@ -463,6 +509,7 @@ export default function CrearConvocatorias() {
           </div>
         </div>
       )}
+
     </div>
   );
 }

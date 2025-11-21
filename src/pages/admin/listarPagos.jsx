@@ -1,3 +1,4 @@
+// src/pages/admin/ListarPagos.jsx
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTheme } from '../../context/ThemeContext';
@@ -5,6 +6,7 @@ import IsLoading from '../../components/isLoading';
 import api, { getToken, clearToken } from '../../services/api';
 import { jwtDecode } from 'jwt-decode';
 import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
+import { formatRutWithDV } from '../../services/rut'; // ✅ Solo frontend
 
 /* ─────────── Helpers ─────────── */
 const asList = (raw) => {
@@ -45,7 +47,8 @@ const firstNonEmpty = (...vals) => {
 };
 
 const normalizeJugador = (j, sucMap, catMap) => {
-  const rut = String(
+  // 🔹 Rut base sin DV (para backend / navegación)
+  const rutBase = String(
     firstNonEmpty(
       j.rut,
       j.jugador_rut,
@@ -56,6 +59,9 @@ const normalizeJugador = (j, sucMap, catMap) => {
       j.rutnum
     )
   );
+
+  // 🔹 Rut con DV solo para mostrar
+  const rutConDV = formatRutWithDV(rutBase);
 
   const nombre = String(
     firstNonEmpty(
@@ -86,7 +92,13 @@ const normalizeJugador = (j, sucMap, catMap) => {
   const catFromMap = catId && catMap ? catMap[Number(catId)] : undefined;
   const categoriaNombre = String(firstNonEmpty(catAnidadaNombre, catFromMap) || 'Sin categoría');
 
-  return { rut, nombre, sucursal, categoria: { id: catId ? Number(catId) : null, nombre: categoriaNombre } };
+  return {
+    rut: rutBase,                     // 👉 lo que usamos para backend / querystring
+    rutConDV,                         // 👉 solo para UI
+    nombre,
+    sucursal,
+    categoria: { id: catId ? Number(catId) : null, nombre: categoriaNombre },
+  };
 };
 
 /* ─────────── COMPONENTE ─────────── */
@@ -118,7 +130,6 @@ export default function ListarPagos() {
   }, [location.pathname, location.search]);
 
   useMobileAutoScrollTop();
-
 
   /* 🔐 Autenticación y roles */
   useEffect(() => {
@@ -175,15 +186,15 @@ export default function ListarPagos() {
   }, [rol, navigate]);
 
   /* 🧭 Handler de navegación al detalle (registrar pago) */
-  const handleRegistrarPago = (rut) => {
+  const handleRegistrarPago = (rutBase) => {
     navigate(
       {
         pathname: '/admin/registrar-pago',
-        search: `?rut=${encodeURIComponent(rut)}`
+        search: `?rut=${encodeURIComponent(rutBase)}`
       },
       {
         state: {
-          rut,
+          rut: rutBase,
           from: '/admin/gestionar-pagos',
           breadcrumb: [{ label: 'Gestionar pagos', to: '/admin/gestionar-pagos' }]
         }
@@ -221,7 +232,8 @@ export default function ListarPagos() {
     const s = q.trim().toLowerCase();
     if (!s) return jugadores;
     return jugadores.filter((j) =>
-      j.rut.toLowerCase().includes(s) ||
+      j.rut.toLowerCase().includes(s) ||        // rut "crudo"
+      j.rutConDV.toLowerCase().includes(s) ||   // rut con DV
       j.nombre.toLowerCase().includes(s) ||
       j.sucursal.toLowerCase().includes(s)
     );
@@ -293,8 +305,12 @@ export default function ListarPagos() {
                 </thead>
                 <tbody>
                   {lista.map((j) => (
-                    <tr key={j.rut || `${j.nombre}-${j.sucursal}`} className="border-t border-gray-600/20 align-middle">
-                      <td className="px-3 py-2 break-words">{j.rut}</td>
+                    <tr
+                      key={j.rut || `${j.nombre}-${j.sucursal}`}
+                      className="border-t border-gray-600/20 align-middle"
+                    >
+                      {/* ✅ Mostramos el RUT con dígito verificador */}
+                      <td className="px-3 py-2 break-words">{j.rutConDV}</td>
                       <td className="px-3 py-2 break-words">{j.nombre}</td>
                       <td className="px-3 py-2 break-words">{j.sucursal}</td>
                       <td className="px-3 py-2">
@@ -330,7 +346,7 @@ export default function ListarPagos() {
                   <div className="text-sm">
                     <div className="flex justify-between gap-3">
                       <span className="opacity-70">RUT</span>
-                      <span className="font-medium break-all text-right">{j.rut}</span>
+                      <span className="font-medium break-all text-right">{j.rutConDV}</span>
                     </div>
                     <div className="flex justify-between gap-3 mt-1">
                       <span className="opacity-70">Nombre</span>

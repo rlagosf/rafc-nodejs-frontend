@@ -6,6 +6,7 @@ import { LoaderCircle } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import api, { getToken, clearToken } from '../../services/api';
 import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
+import { formatRutWithDV } from '../../services/rut'; // ✅ RUT con DV solo para mostrar
 
 export default function DetalleEstadistica() {
   const { darkMode } = useTheme();
@@ -85,7 +86,6 @@ export default function DetalleEstadistica() {
 
   useMobileAutoScrollTop();
 
-
   /* ===================== Helpers ===================== */
   const unwrapJugador = (resData) => {
     const root = resData?.data ?? resData;
@@ -128,6 +128,13 @@ export default function DetalleEstadistica() {
 
   const pretty = (s) =>
     s.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
+
+  /* ✅ RUT con dígito verificador solo para mostrar */
+  const rutConDV = useMemo(() => {
+    if (!jugador) return formatRutWithDV(rut);
+    // Preferimos el rut_jugador que viene desde backend; si no, usamos el param
+    return formatRutWithDV(jugador.rut_jugador ?? rut);
+  }, [jugador, rut]);
 
   /* ============================ Auth ============================ */
   useEffect(() => {
@@ -175,7 +182,6 @@ export default function DetalleEstadistica() {
         const item = Array.isArray(data?.items) && data.items.length > 0 ? data.items[0] : null;
 
         if (item) {
-          // 🔁 Siempre inicializa el formulario en CEROS, aunque existan stats
           setStatsExistentes(() => {
             const est = { ...item };
             if (est.partidos_jugador != null && est.partidos_jugados == null) {
@@ -183,9 +189,8 @@ export default function DetalleEstadistica() {
             }
             return est;
           });
-          setFormData(blankForm(eid)); // 🔁 ← AQUÍ está el cambio clave
+          setFormData(blankForm(eid));
         } else {
-          // Ya lo tenías así: si no hay registros previos, form en 0
           setStatsExistentes({});
           setFormData(blankForm(eid));
         }
@@ -220,7 +225,7 @@ export default function DetalleEstadistica() {
     }));
   };
 
-  const handleResetLocal = () => {           // 🔁 Botón opcional de reset local
+  const handleResetLocal = () => {
     if (estadisticaId != null) setFormData(blankForm(estadisticaId));
   };
 
@@ -230,7 +235,6 @@ export default function DetalleEstadistica() {
     setError('');
     try {
       if (statsExistentes && Object.keys(statsExistentes).length > 0) {
-        // 🔁 Acumula: existente + lo nuevo (que parte en 0)
         const sumaDatos = { ...statsExistentes };
         Object.keys(formData).forEach((campo) => {
           if (campo === 'estadistica_id') return;
@@ -279,7 +283,7 @@ export default function DetalleEstadistica() {
       {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
 
       <h2 className="text-2xl font-bold mb-6 text-center">
-        Modificar Estadísticas de {jugador?.nombre_jugador} (RUT: {rut})
+        Modificar Estadísticas de {jugador?.nombre_jugador} (RUT: {rutConDV})
       </h2>
 
       <div className={`${contenedorClase} max-w-6xl mx-auto`}>
@@ -326,7 +330,7 @@ export default function DetalleEstadistica() {
         <div className="flex justify-center gap-3 mt-6">
           <button
             type="button"
-            onClick={handleResetLocal}              // 🔁 Por si el profe quiere limpiar manualmente
+            onClick={handleResetLocal}
             className="text-white font-bold py-2 px-6 rounded bg-gray-500 hover:bg-gray-600"
           >
             Limpiar a 0

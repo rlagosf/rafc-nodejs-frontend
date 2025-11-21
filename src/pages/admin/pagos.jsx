@@ -6,6 +6,9 @@ import IsLoading from '../../components/isLoading';
 import { jwtDecode } from 'jwt-decode';
 import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
 
+// 🔹 Situación "PAGADO" fija (id 1 en catálogo situacion_pago)
+const SITUACION_PAGADO_ID = 1;
+
 export default function Pagos() {
   const { darkMode } = useTheme();
   const navigate = useNavigate();
@@ -64,10 +67,9 @@ export default function Pagos() {
 
   useMobileAutoScrollTop();
 
-
+  // 🔹 Estado del formulario (sin situacion_pago_id)
   const [form, setForm] = useState({
     tipo_pago_id: '',
-    situacion_pago_id: '',
     monto: '',
     fecha_pago: '',
     medio_pago_id: '',
@@ -77,7 +79,6 @@ export default function Pagos() {
 
   const [tiposPago, setTiposPago] = useState([]);
   const [mediosPago, setMediosPago] = useState([]);
-  const [situacionesPago, setSituacionesPago] = useState([]);
   const [mensaje, setMensaje] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -174,7 +175,7 @@ export default function Pagos() {
     return Number.isFinite(n) && n > 0;
   };
 
-  // ── Carga catálogos
+  // ── Carga catálogos (solo tipo-pago y medio-pago)
   useEffect(() => {
     if (rol !== 1 || !selectedRut) return;
     const abort = new AbortController();
@@ -182,18 +183,16 @@ export default function Pagos() {
       setIsLoading(true);
       setError('');
       try {
-        const [tipos, medios, situaciones] = await Promise.all([
+        const [tipos, medios] = await Promise.all([
           tryGetList(['/tipo-pago'], abort.signal),
-          tryGetList(['/medio-pago'], abort.signal),
-          tryGetList(['/situacion-pago'], abort.signal)
+          tryGetList(['/medio-pago'], abort.signal)
         ]);
 
         if (abort.signal.aborted) return;
         setTiposPago(tipos);
         setMediosPago(medios);
-        setSituacionesPago(situaciones);
 
-        if (!tipos.length || !medios.length || !situaciones.length) {
+        if (!tipos.length || !medios.length) {
           setError('⚠️ No se pudieron cargar todos los catálogos. Verifica las rutas de API.');
         }
       } catch (err) {
@@ -220,11 +219,12 @@ export default function Pagos() {
   };
 
   // Submit consistente con backend (POST /pagos-jugador)
+  // 🔹 situacion_pago_id se fuerza siempre a PAGADO (1) desde el frontend
   const submitPago = async () => {
     const payload = {
       jugador_rut: Number(selectedRut),
       tipo_pago_id: Number(form.tipo_pago_id),
-      situacion_pago_id: Number(form.situacion_pago_id),
+      situacion_pago_id: SITUACION_PAGADO_ID,
       monto: Number(form.monto),
       fecha_pago: String(form.fecha_pago || '').trim(), // YYYY-MM-DD
       medio_pago_id: Number(form.medio_pago_id),
@@ -243,7 +243,6 @@ export default function Pagos() {
     if (
       !selectedRut ||
       !form.tipo_pago_id ||
-      !form.situacion_pago_id ||
       !form.monto ||
       !form.fecha_pago ||
       !form.medio_pago_id
@@ -263,7 +262,6 @@ export default function Pagos() {
       setMensaje('✅ Pago registrado correctamente');
       setForm({
         tipo_pago_id: '',
-        situacion_pago_id: '',
         monto: '',
         fecha_pago: '',
         medio_pago_id: '',
@@ -297,7 +295,6 @@ export default function Pagos() {
     return (
       !selectedRut ||
       !form.tipo_pago_id ||
-      !form.situacion_pago_id ||
       !form.monto ||
       !form.fecha_pago ||
       !form.medio_pago_id ||
@@ -334,18 +331,7 @@ export default function Pagos() {
             ))}
           </select>
 
-          <select
-            name="situacion_pago_id"
-            value={form.situacion_pago_id}
-            onChange={handleChange}
-            className={inputClase}
-            required
-          >
-            <option value="">Seleccione Situación del Pago</option>
-            {situacionesPago.map((sp) => (
-              <option key={sp.id} value={String(sp.id)}>{sp.nombre}</option>
-            ))}
-          </select>
+          {/* 🔹 Campo de situación ELIMINADO: siempre se envía PAGADO (id 1) */}
 
           <input
             name="monto"
