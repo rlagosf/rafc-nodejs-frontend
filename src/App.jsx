@@ -33,6 +33,9 @@ import VerConvocacionHistorica from './pages/admin/verConvocatoriaHistorica';
 import RegistrarEstadisticas from './pages/admin/registraEstadistica';
 import DetalleEstadistica from './pages/admin/detalleEstadistica';
 import ListarPagos from './pages/admin/listarPagos';
+import JugadoresPendientes from './pages/admin/modulo-financiero/jugadoresPendientes';
+import PagosCentralizados from './pages/admin/modulo-financiero/pagosCentralizados';
+import PowerbiFinanzas from './pages/admin/modulo-financiero/powerbiFinanzas';
 import PrevisionMedica from './pages/admin/configuracion/previsionmedica';
 import EstablecimientosEducacionales from './pages/admin/configuracion/estableceduc';
 import Agenda from './pages/admin/agenda';
@@ -106,7 +109,9 @@ export default function App() {
             {/* Pagos */}
             <Route path="gestionar-pagos" element={<ListarPagos />} />
             <Route path="registrar-pago" element={<Pagos />} />
-
+            <Route path="modulo-financiero/jugadores-pendientes" element={<JugadoresPendientes/>} />
+            <Route path="modulo-financiero/power-bi" element={<PowerbiFinanzas/>} />
+            <Route path="modulo-financiero/pagos-centralizados" element={<PagosCentralizados/>} />
             <Route path="estados-cuenta" element={<EstadosCuenta />} />
             <Route path="configuracion" element={<Configuracion />} />
             <Route path="configuracion/categorias" element={<Categorias />} />
