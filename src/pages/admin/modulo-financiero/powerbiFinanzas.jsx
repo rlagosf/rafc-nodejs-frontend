@@ -60,6 +60,23 @@ export default function PowerbiFinanzas() {
     }
   }, [navigate]);
 
+  // 🧭 Inyectar breadcrumb correcto si no viene desde el dashboard
+  // Queremos: Inicio / Estados de Cuenta / Power BI financiero
+  useEffect(() => {
+    if (!Array.isArray(location.state?.breadcrumb)) {
+      navigate(location.pathname + location.search, {
+        replace: true,
+        state: {
+          ...(location.state || {}),
+          breadcrumb: [
+            { to: "/admin/estados-cuenta", label: "Estados de Cuenta" },
+            { to: location.pathname, label: "Power BI financiero" },
+          ],
+        },
+      });
+    }
+  }, [location, navigate]);
+
   // Helpers para fetch (mismo estilo que EstadosCuenta/PagosCentralizados)
   const normalizeListResponse = (res) => {
     if (!res || res.status === 204) return [];
@@ -247,17 +264,6 @@ export default function PowerbiFinanzas() {
     ? "bg-[#1f2937] shadow-lg rounded-lg p-4 border border-gray-700"
     : "bg-white shadow-md rounded-lg p-4 border border-gray-200";
 
-  // 🧭 Breadcrumb base (permite override por location.state.breadcrumb)
-  const baseBreadcrumb = [
-    { label: "Panel Admin", path: "/admin" },
-    { label: "Módulo financiero", path: "/admin/estados-cuenta" },
-    { label: "Power BI financiero", path: "/admin/modulo-financiero/powerbi-finanzas" },
-  ];
-
-  const breadcrumb = Array.isArray(location.state?.breadcrumb)
-    ? location.state.breadcrumb
-    : baseBreadcrumb;
-
   // 📊 Configuración de gráficos
   const colores = useMemo(
     () => [
@@ -362,32 +368,13 @@ export default function PowerbiFinanzas() {
 
   return (
     <div className={`${estiloFondo} min-h-[calc(100vh-100px)] px-4 pt-4 pb-16 font-realacademy`}>
-      {/* Breadcrumb simple (texto) */}
-      <nav className="text-xs sm:text-sm mb-3 opacity-80">
-        {breadcrumb.map((b, idx) => (
-          <span key={b.path || idx}>
-            {idx > 0 && " / "}
-            {b.path ? (
-              <button
-                type="button"
-                onClick={() => navigate(b.path)}
-                className="hover:underline"
-              >
-                {b.label}
-              </button>
-            ) : (
-              <span>{b.label}</span>
-            )}
-          </span>
-        ))}
-      </nav>
-
       <h2 className="text-2xl font-bold mb-2 text-center">
         Power BI Financiero — Resumen de Pagos
       </h2>
       <p className="text-center mb-6 text-sm opacity-80">
         Visualización consolidada de <span className="font-semibold">todos los pagos registrados</span> en{" "}
-        <span className="font-semibold">pagos_jugador</span>. Ideal para análisis rápido tipo "Power BI" directamente en el panel.
+        <span className="font-semibold">pagos_jugador</span>. Ideal para análisis rápido tipo "Power BI"
+        directamente en el panel.
       </p>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

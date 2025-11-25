@@ -51,7 +51,7 @@ export default function JugadoresPendientes() {
     }
   }, [navigate]);
 
-  // 🧭 Inyectar breadcrumb si no viene desde el dashboard
+  // 🧭 Inyectar breadcrumb correcto si no viene desde el dashboard
   useEffect(() => {
     if (!Array.isArray(location.state?.breadcrumb)) {
       navigate(location.pathname + location.search, {
@@ -59,9 +59,9 @@ export default function JugadoresPendientes() {
         state: {
           ...(location.state || {}),
           breadcrumb: [
-            { label: 'Panel Admin', path: '/admin' },
-            { label: 'Módulo financiero', path: '/admin/estados-cuenta' },
-            { label: 'Jugadores con mensualidad vencida', path: location.pathname },
+            // El dashboard ya agrega "Inicio" (/admin)
+            { to: '/admin/estados-cuenta', label: 'Estados de Cuenta' },
+            { to: location.pathname, label: 'Jugadores con mensualidad vencida' },
           ],
         },
       });

@@ -91,8 +91,7 @@ export default function PagosCentralizados() {
         state: {
           ...(location.state || {}),
           breadcrumb: [
-            { label: 'Panel Admin', path: '/admin' },
-            { label: 'Módulo financiero', path: '/admin/estados-cuenta' },
+            { to: '/admin/estados-cuenta', label: 'Estados de cuenta'},
             { label: 'Pagos centralizados', path: location.pathname },
           ],
         },

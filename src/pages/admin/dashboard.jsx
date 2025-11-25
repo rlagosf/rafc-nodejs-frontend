@@ -19,7 +19,8 @@ import {
   FileSpreadsheet, // Estados de Cuenta
   UserCog,         // Crear Usuario
   Settings,        // Configuración
-  CalendarDays     // Agenda de eventos
+  CalendarDays,    // Agenda de eventos
+  Stethoscope      // Seguimiento médico (próximamente)
 } from 'lucide-react';
 import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
 
@@ -43,6 +44,7 @@ const segToLabel = (seg) => {
     'crear-usuario': 'Crear Usuario',
     'configuracion': 'Configuración',
     'agenda': 'Agenda',
+    'seguimiento-medico': 'Seguimiento médico',
   };
   return map[seg] || (seg?.charAt(0).toUpperCase() + seg.slice(1).replaceAll('-', ' '));
 };
@@ -78,17 +80,25 @@ const normalizeStateBreadcrumb = (stateBc = []) => {
 
 // Definición de tarjetas de acceso (con íconos)
 const cards = [
-  { to: '/admin/crear-jugador',              label: 'Crear Jugador',            roles: [1],     Icon: UserPlus },
-  { to: '/admin/listar-jugadores',           label: 'Listar Jugadores',         roles: [1, 2],  Icon: Users },
-  { to: '/admin/registrar-estadisticas',     label: 'Registrar Estadísticas',   roles: [1, 2],  Icon: ClipboardList },
-  { to: '/admin/estadisticas',               label: 'Estadísticas Globales',    roles: [1, 2],  Icon: BarChart3 },
-  { to: '/admin/convocatorias',              label: 'Crear Convocatorias',      roles: [1],     Icon: CalendarPlus },
-  { to: '/admin/ver-convocaciones-historicas', label: 'Historial Convocatorias', roles: [1, 2],  Icon: History },
-  { to: '/admin/gestionar-pagos',            label: 'Gestionar pagos',          roles: [1],     Icon: Banknote },
-  { to: '/admin/estados-cuenta',             label: 'Estados de Cuenta',        roles: [1],     Icon: FileSpreadsheet },
-  { to: '/admin/crear-usuario',              label: 'Crear Usuario',            roles: [1],     Icon: UserCog },
-  { to: '/admin/configuracion',              label: 'Configuración',            roles: [1],     Icon: Settings },
-  { to: '/admin/agenda',                     label: 'Agenda de eventos',        roles: [1, 2],  Icon: CalendarDays },
+  { to: '/admin/crear-jugador',                label: 'Crear Jugador',                       roles: [1],    Icon: UserPlus },
+  { to: '/admin/listar-jugadores',             label: 'Listar Jugadores',                    roles: [1, 2], Icon: Users },
+  { to: '/admin/registrar-estadisticas',       label: 'Registrar Estadísticas',              roles: [1, 2], Icon: ClipboardList },
+  { to: '/admin/estadisticas',                 label: 'Estadísticas Globales',               roles: [1, 2], Icon: BarChart3 },
+  { to: '/admin/convocatorias',                label: 'Crear Convocatorias',                 roles: [1],    Icon: CalendarPlus },
+  { to: '/admin/ver-convocaciones-historicas', label: 'Historial Convocatorias',             roles: [1, 2], Icon: History },
+  { to: '/admin/gestionar-pagos',              label: 'Gestionar pagos',                     roles: [1],    Icon: Banknote },
+  { to: '/admin/estados-cuenta',               label: 'Estados de Cuenta',                   roles: [1],    Icon: FileSpreadsheet },
+  { to: '/admin/crear-usuario',                label: 'Crear Usuario',                       roles: [1],    Icon: UserCog },
+  { to: '/admin/configuracion',                label: 'Configuración',                       roles: [1],    Icon: Settings },
+  { to: '/admin/agenda',                       label: 'Agenda de eventos',                   roles: [1, 2], Icon: CalendarDays },
+  // 🔴 Nueva tarjeta: Seguimiento médico (próximamente, deshabilitada)
+  {
+    to: '/admin/seguimiento-medico',
+    label: 'Seguimiento médico (próximamente)',
+    roles: [1, 2],
+    Icon: Stethoscope,
+    disabled: true,
+  },
 ];
 
 /* ───────────────── Component ───────────────── */
@@ -132,7 +142,6 @@ export default function Dashboard() {
   }, [navigate]);
 
   useMobileAutoScrollTop();
-
 
   const handleCerrarSesion = async () => {
     const token = localStorage.getItem(TOKEN_KEY);
@@ -217,16 +226,33 @@ export default function Dashboard() {
             <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {cards
                 .filter(c => !c.roles || c.roles.includes(rol))
-                .map(({ to, label, Icon }) => (
-                  <Link
-                    key={to}
-                    to={to}
-                    className={`${cardBase} rounded-2xl p-6 shadow transition transform hover:-translate-y-1 hover:shadow-lg flex flex-col items-center justify-center gap-3 h-40`}
-                  >
-                    <Icon className="w-12 h-12 opacity-90" />
-                    <div className="text-center font-semibold">{label}</div>
-                  </Link>
-                ))}
+                .map(({ to, label, Icon, disabled }) => {
+                  const commonClasses = `${cardBase} rounded-2xl p-6 shadow transition transform flex flex-col items-center justify-center gap-3 h-40`;
+                  if (disabled) {
+                    // Tarjeta deshabilitada: no navega
+                    return (
+                      <div
+                        key={to}
+                        className={`${commonClasses} opacity-60 cursor-not-allowed hover:-translate-y-0 hover:shadow-md`}
+                        title="Módulo próximamente disponible"
+                      >
+                        <Icon className="w-12 h-12 opacity-90" />
+                        <div className="text-center font-semibold">{label}</div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <Link
+                      key={to}
+                      to={to}
+                      className={`${commonClasses} hover:-translate-y-1 hover:shadow-lg`}
+                    >
+                      <Icon className="w-12 h-12 opacity-90" />
+                      <div className="text-center font-semibold">{label}</div>
+                    </Link>
+                  );
+                })}
             </div>
           </>
         ) : (
