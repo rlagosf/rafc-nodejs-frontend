@@ -26,11 +26,11 @@ export default function Ubicacion() {
           transition: { duration: 0.8, ease: 'easeOut' },
         },
       }}
-      className="text-white pt-20 pb-0 px-6 font-sans"  // ⬅️ sin padding abajo
+      className="text-white pt-20 pb-0 px-6 font-sans"
     >
       <div className="max-w-6xl mx-auto">
         {/* Título */}
-        <div className="max-w-4xl text-center mb-6 mx-auto">
+        <div className="max-w-4xl text-center mb-10 md:mb-12 mx-auto">
           <p className="text-2xl md:text-3xl font-bold italic text-[#e82d89] transform rotate-[-2deg] scale-105 drop-shadow-[0_0_15px_#e82d89aa]">
             Visítanos en nuestras sucursales, y sé parte de nuestro equipo
           </p>
@@ -71,6 +71,7 @@ export default function Ubicacion() {
                 </h3>
                 <p className="text-gray-300 text-sm leading-relaxed">
                   Sede tradicional de RAFC, con enfoque en formación integral y trabajo técnico/táctico.
+                  <br />
                   <br />
                   <span className="opacity-80">
                     Dirección: Av. Los Pajaritos 4273, Maipú, Región Metropolitana
@@ -114,7 +115,11 @@ export default function Ubicacion() {
                   Sucursal Estadio Las Rejas
                 </h3>
                 <p className="text-gray-300 text-sm leading-relaxed">
-                  Nueva sede RAFC orientada al desarrollo futbolístico juvenil, con instalaciones amplias y un entorno inspirador. Dirección: Los Maitenes 5812, Estación Central, Región Metropolitana
+                  Nueva sede RAFC orientada al desarrollo futbolístico juvenil, con instalaciones amplias y un entorno inspirador.
+                  <br />
+                  <span className="opacity-80">
+                    Dirección: Los Maitenes 5812, Estación Central, Región Metropolitana
+                  </span>
                 </p>
               </div>
             </div>
@@ -130,7 +135,6 @@ export default function Ubicacion() {
         </motion.div>
       </div>
 
-      {/* 🚫 Cierro gap con negative margin: empuja hacia arriba el siguiente bloque */}
       <div className="-mb-8 lg:-mb-12" aria-hidden="true" />
     </motion.section>
   );

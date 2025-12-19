@@ -53,8 +53,9 @@ th, td {
 }
 
 .breadcrumb li {
-  @apply text-fucsia-ra font-semibold;
+  @apply text-ra-fucsia font-semibold;
 }
+
 
 /* ============================== */
 /* Inputs y selects (light/dark)  */
