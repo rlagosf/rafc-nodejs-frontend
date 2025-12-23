@@ -9,18 +9,18 @@ import {
   LogOut,
   Sun,
   Moon,
-  UserPlus,        // Crear Jugador
-  Users,           // Listar Jugadores
-  ClipboardList,   // Registrar Estadísticas
-  BarChart3,       // Estadísticas Globales
-  CalendarPlus,    // Crear Convocatorias
-  History,         // Historial Convocatorias
-  Banknote,        // Gestionar pagos
-  FileSpreadsheet, // Estados de Cuenta
-  UserCog,         // Crear Usuario
-  Settings,        // Configuración
-  CalendarDays,    // Agenda de eventos
-  Stethoscope      // Seguimiento médico (próximamente)
+  UserPlus,
+  Users,
+  ClipboardList,
+  BarChart3,
+  CalendarPlus,
+  History,
+  Banknote,
+  PieChart,       // ✅ NUEVO icono torta
+  UserCog,
+  Settings,
+  CalendarDays,
+  Stethoscope
 } from 'lucide-react';
 import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
 
@@ -40,7 +40,7 @@ const segToLabel = (seg) => {
     'ver-convocaciones-historicas': 'Histórico Convocatorias',
     'gestionar-pagos': 'Gestionar pagos',
     'registrar-pago': 'Registrar pago',
-    'estados-cuenta': 'Estados de Cuenta',
+    'powerbi-finanzas': 'POWER BI FINANCIERO', // ✅ NUEVO label breadcrumb por URL
     'crear-usuario': 'Crear Usuario',
     'configuracion': 'Configuración',
     'agenda': 'Agenda',
@@ -50,7 +50,7 @@ const segToLabel = (seg) => {
 };
 
 const buildBreadcrumb = (pathname) => {
-  const parts = pathname.split('/').filter(Boolean); // ['admin', '...']
+  const parts = pathname.split('/').filter(Boolean);
   const items = [];
   let acc = '';
   for (let i = 0; i < parts.length; i++) {
@@ -69,7 +69,6 @@ const buildBreadcrumb = (pathname) => {
 
 // Normaliza breadcrumbs cuando vienen desde location.state.breadcrumb
 const normalizeStateBreadcrumb = (stateBc = []) => {
-  // Asegura que el primer ítem sea "Inicio"
   const base = [{ to: '/admin', label: 'Inicio' }];
   const merged = [...base, ...stateBc.map(b => ({ to: b.to, label: b.label }))];
   return merged.map((item, idx) => ({
@@ -87,11 +86,13 @@ const cards = [
   { to: '/admin/convocatorias',                label: 'Crear Convocatorias',                 roles: [1],    Icon: CalendarPlus },
   { to: '/admin/ver-convocaciones-historicas', label: 'Historial Convocatorias',             roles: [1, 2], Icon: History },
   { to: '/admin/gestionar-pagos',              label: 'Gestionar pagos',                     roles: [1],    Icon: Banknote },
-  { to: '/admin/estados-cuenta',               label: 'Estados de Cuenta',                   roles: [1],    Icon: FileSpreadsheet },
+
+  // ✅ REEMPLAZO: Estados de Cuenta -> POWER BI FINANCIERO
+  { to: '/admin/power-bi',                     label: 'POWER BI FINANCIERO',                 roles: [1],    Icon: PieChart },
+
   { to: '/admin/crear-usuario',                label: 'Crear Usuario',                       roles: [1],    Icon: UserCog },
   { to: '/admin/configuracion',                label: 'Configuración',                       roles: [1],    Icon: Settings },
   { to: '/admin/agenda',                       label: 'Agenda de eventos',                   roles: [1, 2], Icon: CalendarDays },
-  // 🔴 Nueva tarjeta: Seguimiento médico (próximamente, deshabilitada)
   {
     to: '/admin/seguimiento-medico',
     label: 'Seguimiento médico (próximamente)',
@@ -110,7 +111,6 @@ export default function Dashboard() {
   const [rol, setRol] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Auth mínima con intento de refresh
   useEffect(() => {
     (async () => {
       try {
@@ -159,7 +159,6 @@ export default function Dashboard() {
     }
   };
 
-  // 🧭 Breadcrumb: prioriza state.breadcrumb, si no existe, usa la URL
   const bc = useMemo(() => {
     const stateBc = location.state?.breadcrumb;
     if (Array.isArray(stateBc) && stateBc.length) {
@@ -179,9 +178,7 @@ export default function Dashboard() {
 
   return (
     <div className={`${fondo} min-h-screen font-realacademy`}>
-      {/* Encabezado con acciones rápidas */}
       <header className="flex items-center justify-between px-6 pt-6">
-        {/* Breadcrumb a la izquierda */}
         <nav className="text-sm" aria-label="breadcrumb">
           <ol className="flex flex-wrap items-center gap-2">
             {bc.map((b, i) => (
@@ -197,7 +194,6 @@ export default function Dashboard() {
           </ol>
         </nav>
 
-        {/* Acciones a la derecha */}
         <div className="flex items-center gap-3">
           <button
             title="Cambiar tema"
@@ -216,45 +212,40 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Título centrado */}
       <h1 className="text-3xl font-bold text-center mt-4 mb-8">Panel de Administración</h1>
 
       <main className="px-6 pb-20">
         {isRoot ? (
-          <>
-            {/* Grid de tarjetas */}
-            <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {cards
-                .filter(c => !c.roles || c.roles.includes(rol))
-                .map(({ to, label, Icon, disabled }) => {
-                  const commonClasses = `${cardBase} rounded-2xl p-6 shadow transition transform flex flex-col items-center justify-center gap-3 h-40`;
-                  if (disabled) {
-                    // Tarjeta deshabilitada: no navega
-                    return (
-                      <div
-                        key={to}
-                        className={`${commonClasses} opacity-60 cursor-not-allowed hover:-translate-y-0 hover:shadow-md`}
-                        title="Módulo próximamente disponible"
-                      >
-                        <Icon className="w-12 h-12 opacity-90" />
-                        <div className="text-center font-semibold">{label}</div>
-                      </div>
-                    );
-                  }
-
+          <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {cards
+              .filter(c => !c.roles || c.roles.includes(rol))
+              .map(({ to, label, Icon, disabled }) => {
+                const commonClasses = `${cardBase} rounded-2xl p-6 shadow transition transform flex flex-col items-center justify-center gap-3 h-40`;
+                if (disabled) {
                   return (
-                    <Link
+                    <div
                       key={to}
-                      to={to}
-                      className={`${commonClasses} hover:-translate-y-1 hover:shadow-lg`}
+                      className={`${commonClasses} opacity-60 cursor-not-allowed hover:-translate-y-0 hover:shadow-md`}
+                      title="Módulo próximamente disponible"
                     >
                       <Icon className="w-12 h-12 opacity-90" />
                       <div className="text-center font-semibold">{label}</div>
-                    </Link>
+                    </div>
                   );
-                })}
-            </div>
-          </>
+                }
+
+                return (
+                  <Link
+                    key={to}
+                    to={to}
+                    className={`${commonClasses} hover:-translate-y-1 hover:shadow-lg`}
+                  >
+                    <Icon className="w-12 h-12 opacity-90" />
+                    <div className="text-center font-semibold">{label}</div>
+                  </Link>
+                );
+              })}
+          </div>
         ) : (
           <Outlet />
         )}

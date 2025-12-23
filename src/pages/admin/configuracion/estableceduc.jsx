@@ -7,7 +7,6 @@ import { useTheme } from '../../../context/ThemeContext';
 import Modal from '../../../components/modal';
 import { useMobileAutoScrollTop } from '../../../hooks/useMobileScrollTop';
 
-
 export default function EstablecimientosEducacionales() {
   const { darkMode } = useTheme();
   const navigate = useNavigate();
@@ -28,8 +27,7 @@ export default function EstablecimientosEducacionales() {
   ─────────────────────────────── */
   const abreviar = (txt) => {
     if (!txt) return '';
-    if (window.innerWidth > 640) return txt; // no abreviar en desktop/tablet
-
+    if (window.innerWidth > 640) return txt;
     if (txt.length <= 14) return txt;
 
     return txt
@@ -38,9 +36,7 @@ export default function EstablecimientosEducacionales() {
       .join(' ');
   };
 
-  // Breadcrumb
   useMobileAutoScrollTop();
-
 
   useEffect(() => {
     const currentPath = location.pathname;
@@ -59,6 +55,7 @@ export default function EstablecimientosEducacionales() {
         },
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
   /* ───────────────────────────────
@@ -108,16 +105,70 @@ export default function EstablecimientosEducacionales() {
     return [];
   };
 
+  // ✅ con tu api.js interceptor: error normalizado
+  const getErrStatus = (err) => err?.status ?? err?.response?.status ?? 0;
+  const getErrData = (err) => err?.data ?? err?.response?.data ?? null;
+
+  const prettyError = (err, fallback) => {
+    const st = getErrStatus(err);
+    const data = getErrData(err);
+
+    const backendMsg = data?.message || data?.detail || data?.error || err?.message || null;
+
+    if (st === 401 || st === 403) {
+      return '🔒 Sesión expirada o sin permisos. Vuelve a iniciar sesión.';
+    }
+
+    if (st === 400) {
+      return backendMsg || '⚠️ Datos inválidos. Revisa el nombre.';
+    }
+
+    if (st === 404) {
+      return backendMsg || '⚠️ No encontrado (puede que ya haya sido eliminado).';
+    }
+
+    if (st === 409) {
+      // FK MySQL
+      if (data?.errno === 1451 || data?.code === 'ER_ROW_IS_REFERENCED_2') {
+        return '⚠️ No se puede eliminar: hay jugador(es) asociados a este establecimiento.';
+      }
+      // duplicado MySQL
+      if (data?.errno === 1062 || data?.code === 'ER_DUP_ENTRY') {
+        return '⚠️ Ya existe un establecimiento con ese nombre.';
+      }
+      return backendMsg || '⚠️ Conflicto: no se pudo completar la acción.';
+    }
+
+    // algunos backends devuelven 500 con errno
+    if (data?.errno === 1451 || data?.code === 'ER_ROW_IS_REFERENCED_2') {
+      return '⚠️ No se puede eliminar: hay jugador(es) asociados a este establecimiento.';
+    }
+    if (data?.errno === 1062 || data?.code === 'ER_DUP_ENTRY') {
+      return '⚠️ Ya existe un establecimiento con ese nombre.';
+    }
+
+    return backendMsg || fallback || '❌ Error inesperado.';
+  };
+
+  const handleAuth = () => {
+    clearToken();
+    navigate('/login', { replace: true });
+  };
+
   const withVariants = (fn) => async (base, ...args) => {
     const urls = base.endsWith('/') ? [base, base.slice(0, -1)] : [base, `${base}/`];
+    let lastErr = null;
+
     for (const u of urls) {
       try {
         return await fn(u, ...args);
       } catch (e) {
-        if ([401, 403].includes(e?.response?.status)) throw e;
+        lastErr = e;
+        const st = getErrStatus(e);
+        if (st === 401 || st === 403) throw e;
       }
     }
-    throw new Error('ENDPOINT_VARIANTS_FAILED');
+    throw lastErr || new Error('ENDPOINT_VARIANTS_FAILED');
   };
 
   const getVar = withVariants((u, c) => api.get(u, c));
@@ -133,12 +184,9 @@ export default function EstablecimientosEducacionales() {
       const res = await getVar('/establecimientos-educ');
       setEstablecimientos(toArray(res));
     } catch (err) {
-      if ([401, 403].includes(err?.response?.status)) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError('❌ Error al obtener establecimientos');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ Error al obtener establecimientos'));
     }
   };
 
@@ -151,6 +199,7 @@ export default function EstablecimientosEducacionales() {
     return () => {
       alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* ───────────────────────────────
@@ -158,7 +207,8 @@ export default function EstablecimientosEducacionales() {
   ─────────────────────────────── */
   const crear = async () => {
     const nombre = sanitizar(nuevo);
-    if (nombre.length < 3) return setError('❌ Nombre muy corto');
+    if (nombre.length < 3) return setError('⚠️ El nombre debe tener al menos 3 caracteres.');
+
     setBusy(true);
     try {
       await postVar('/establecimientos-educ', { nombre });
@@ -166,7 +216,9 @@ export default function EstablecimientosEducacionales() {
       flash('✅ Establecimiento creado');
       await fetchDatos();
     } catch (err) {
-      handleErr(err, '❌ Error al crear');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo crear el establecimiento.'));
     } finally {
       setBusy(false);
     }
@@ -176,19 +228,21 @@ export default function EstablecimientosEducacionales() {
      Actualizar
   ─────────────────────────────── */
   const actualizar = async () => {
-    if (!editarId) return setError('❌ Debes seleccionar un establecimiento');
+    if (!editarId) return setError('⚠️ Debes seleccionar un establecimiento.');
     const nombre = sanitizar(editarNombre);
-    if (nombre.length < 3) return setError('❌ Nombre muy corto');
+    if (nombre.length < 3) return setError('⚠️ El nombre debe tener al menos 3 caracteres.');
 
     setBusy(true);
     try {
       await putVar(`/establecimientos-educ/${editarId}`, { nombre });
       setEditarId(null);
       setEditarNombre('');
-      flash('✅ Actualizado');
+      flash('✅ Establecimiento actualizado');
       await fetchDatos();
     } catch (err) {
-      handleErr(err, '❌ Error al actualizar');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo actualizar el establecimiento.'));
     } finally {
       setBusy(false);
     }
@@ -203,25 +257,17 @@ export default function EstablecimientosEducacionales() {
     setBusy(true);
     try {
       await delVar(`/establecimientos-educ/${seleccionado.id}`);
-      flash('✅ Eliminado');
+      flash('✅ Establecimiento eliminado');
       await fetchDatos();
     } catch (err) {
-      handleErr(err, '❌ Error al eliminar');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo eliminar el establecimiento.'));
     } finally {
       setBusy(false);
       setMostrarModal(false);
       setSeleccionado(null);
     }
-  };
-
-  const handleErr = (err, fallback) => {
-    const st = err?.response?.status;
-    if (st === 401 || st === 403) {
-      clearToken();
-      navigate('/login', { replace: true });
-      return;
-    }
-    setError(err?.response?.data?.detail || err?.response?.data?.message || fallback);
   };
 
   /* ───────────────────────────────
@@ -269,8 +315,9 @@ export default function EstablecimientosEducacionales() {
           <button
             onClick={crear}
             disabled={busy}
-            className={`mt-4 w-full py-2 rounded text-white ${busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
-              }`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
           >
             Guardar
           </button>
@@ -307,8 +354,11 @@ export default function EstablecimientosEducacionales() {
           <button
             onClick={actualizar}
             disabled={busy || !editarId}
-            className={`mt-4 w-full py-2 rounded text-white ${busy || !editarId ? 'bg-gray-400 cursor-not-allowed' : 'bg-yellow-600 hover:bg-yellow-700'
-              }`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              busy || !editarId
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-yellow-600 hover:bg-yellow-700'
+            }`}
           >
             Actualizar
           </button>
@@ -338,8 +388,11 @@ export default function EstablecimientosEducacionales() {
           <button
             onClick={() => setMostrarModal(true)}
             disabled={!seleccionado || busy}
-            className={`mt-4 w-full py-2 rounded text-white ${!seleccionado || busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'
-              }`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              !seleccionado || busy
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-red-600 hover:bg-red-700'
+            }`}
           >
             Eliminar
           </button>

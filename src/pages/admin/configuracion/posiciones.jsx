@@ -22,7 +22,7 @@ export default function Posiciones() {
   const [posicionSeleccionada, setPosicionSeleccionada] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  // 🧭 El breadcrumb lo pinta el layout /admin (no nav local aquí)
+  // 🧭 Breadcrumb lo pinta el layout /admin
   useEffect(() => {
     const currentPath = location.pathname;
     const bc = Array.isArray(location.state?.breadcrumb) ? location.state.breadcrumb : [];
@@ -43,7 +43,6 @@ export default function Posiciones() {
   }, [location.pathname]);
 
   useMobileAutoScrollTop();
-
 
   // 🔐 Auth (solo admin = 1)
   useEffect(() => {
@@ -72,7 +71,10 @@ export default function Posiciones() {
   const flash = (okMsg, errMsg) => {
     if (okMsg) setMensaje(okMsg);
     if (errMsg) setError(errMsg);
-    setTimeout(() => { setMensaje(''); setError(''); }, 2500);
+    setTimeout(() => {
+      setMensaje('');
+      setError('');
+    }, 2500);
   };
 
   const toArray = (resp) => {
@@ -85,22 +87,74 @@ export default function Posiciones() {
     return [];
   };
 
+  // ✅ error normalizado por api.js
+  const getErrStatus = (err) => err?.status ?? err?.response?.status ?? 0;
+  const getErrData = (err) => err?.data ?? err?.response?.data ?? null;
+
+  const prettyError = (err, fallback) => {
+    const st = getErrStatus(err);
+    const data = getErrData(err);
+    const backendMsg = data?.message || data?.detail || data?.error || err?.message || null;
+
+    if (st === 401 || st === 403) {
+      return '🔒 Sesión expirada o sin permisos. Vuelve a iniciar sesión.';
+    }
+
+    if (st === 400) {
+      return backendMsg || '⚠️ Datos inválidos. Revisa el nombre.';
+    }
+
+    if (st === 404) {
+      return backendMsg || '⚠️ No encontrado (puede que ya haya sido eliminado).';
+    }
+
+    if (st === 409) {
+      if (data?.errno === 1451 || data?.code === 'ER_ROW_IS_REFERENCED_2') {
+        return '⚠️ No se puede eliminar: esta posición está asignada a uno o más jugadores.';
+      }
+      if (data?.errno === 1062 || data?.code === 'ER_DUP_ENTRY') {
+        return '⚠️ Ya existe una posición con ese nombre.';
+      }
+      return backendMsg || '⚠️ Conflicto: no se pudo completar la acción.';
+    }
+
+    // por si viene 500 pero con errno/code
+    if (data?.errno === 1451 || data?.code === 'ER_ROW_IS_REFERENCED_2') {
+      return '⚠️ No se puede eliminar: esta posición está asignada a uno o más jugadores.';
+    }
+    if (data?.errno === 1062 || data?.code === 'ER_DUP_ENTRY') {
+      return '⚠️ Ya existe una posición con ese nombre.';
+    }
+
+    return backendMsg || fallback || '❌ Error inesperado.';
+  };
+
+  const handleAuth = () => {
+    clearToken();
+    navigate('/login', { replace: true });
+  };
+
   // Aceptar variantes con y sin slash final
   const withVariants = (fn) => async (base, ...args) => {
     const urls = base.endsWith('/') ? [base, base.slice(0, -1)] : [base, `${base}/`];
+    let lastErr = null;
+
     for (const u of urls) {
-      try { return await fn(u, ...args); } catch (e) {
-        const st = e?.response?.status;
-        if (st === 401 || st === 403) throw e; // auth → burbujear
+      try {
+        return await fn(u, ...args);
+      } catch (e) {
+        lastErr = e;
+        const st = getErrStatus(e);
+        if (st === 401 || st === 403) throw e;
       }
     }
-    throw new Error('ENDPOINT_VARIANTS_FAILED');
+    throw lastErr || new Error('ENDPOINT_VARIANTS_FAILED');
   };
 
-  const getVar  = withVariants((u, cfg) => api.get(u, cfg));
+  const getVar = withVariants((u, cfg) => api.get(u, cfg));
   const postVar = withVariants((u, payload, cfg) => api.post(u, payload, cfg));
-  const putVar  = withVariants((u, payload, cfg) => api.put(u, payload, cfg));
-  const delVar  = withVariants((u, cfg) => api.delete(u, cfg));
+  const putVar = withVariants((u, payload, cfg) => api.put(u, payload, cfg));
+  const delVar = withVariants((u, cfg) => api.delete(u, cfg));
 
   // ───────── Fetch ─────────
   const fetchPosiciones = async () => {
@@ -108,13 +162,9 @@ export default function Posiciones() {
       const res = await getVar('/posiciones');
       setPosiciones(toArray(res));
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError('❌ Error al obtener posiciones');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ Error al obtener posiciones'));
     }
   };
 
@@ -124,13 +174,17 @@ export default function Posiciones() {
       await fetchPosiciones();
       if (!alive) return;
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ───────── Crear ─────────
   const crearPosicion = async () => {
     const nombre = sanitizar(nuevaPosicion);
-    if (nombre.length < 3) return setError('❌ Mínimo 3 caracteres');
+    if (nombre.length < 3) return setError('⚠️ El nombre debe tener al menos 3 caracteres.');
+
     setBusy(true);
     try {
       await postVar('/posiciones', { nombre });
@@ -138,13 +192,9 @@ export default function Posiciones() {
       flash('✅ Posición creada');
       await fetchPosiciones();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError(err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al crear posición');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo crear la posición.'));
     } finally {
       setBusy(false);
     }
@@ -152,9 +202,10 @@ export default function Posiciones() {
 
   // ───────── Actualizar ─────────
   const actualizarPosicion = async () => {
-    if (!editarId) return setError('❌ Debes seleccionar una posición');
+    if (!editarId) return setError('⚠️ Debes seleccionar una posición.');
     const nombre = sanitizar(editarNombre);
-    if (nombre.length < 3) return setError('❌ Mínimo 3 caracteres');
+    if (nombre.length < 3) return setError('⚠️ El nombre debe tener al menos 3 caracteres.');
+
     setBusy(true);
     try {
       await putVar(`/posiciones/${editarId}`, { nombre });
@@ -163,13 +214,9 @@ export default function Posiciones() {
       flash('✅ Posición actualizada');
       await fetchPosiciones();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError(err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al actualizar posición');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo actualizar la posición.'));
     } finally {
       setBusy(false);
     }
@@ -181,19 +228,16 @@ export default function Posiciones() {
       setMostrarModal(false);
       return;
     }
+
     setBusy(true);
     try {
       await delVar(`/posiciones/${posicionSeleccionada.id}`);
       flash('✅ Posición eliminada');
       await fetchPosiciones();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError(err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al eliminar');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo eliminar la posición.'));
     } finally {
       setBusy(false);
       setMostrarModal(false);
@@ -211,8 +255,6 @@ export default function Posiciones() {
 
   return (
     <div className={`${fondo} min-h-screen px-4 pt-4 pb-16 font-realacademy`}>
-      {/* 🚫 Sin breadcrumb local; el layout /admin usa location.state */}
-
       <h2 className="text-2xl font-bold mb-6 text-center">Gestión de Posiciones</h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-6xl mx-auto">
@@ -223,7 +265,9 @@ export default function Posiciones() {
             <p className="opacity-60">Sin posiciones registradas.</p>
           ) : (
             <ul className="list-disc pl-5 space-y-1">
-              {posiciones.map((pos) => (<li key={pos.id}>{pos.nombre ?? `#${pos.id}`}</li>))}
+              {posiciones.map((pos) => (
+                <li key={pos.id}>{pos.nombre ?? `#${pos.id}`}</li>
+              ))}
             </ul>
           )}
         </div>
@@ -234,14 +278,19 @@ export default function Posiciones() {
           <input
             type="text"
             value={nuevaPosicion}
-            onChange={(e) => { setNuevaPosicion(e.target.value); setError(''); }}
+            onChange={(e) => {
+              setNuevaPosicion(e.target.value);
+              setError('');
+            }}
             placeholder="Nombre posición"
             className={inputClase}
           />
           <button
             onClick={crearPosicion}
             disabled={busy}
-            className={`mt-4 w-full py-2 rounded text-white ${busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
           >
             Guardar
           </button>
@@ -262,8 +311,13 @@ export default function Posiciones() {
             className={`${inputClase} mb-2`}
           >
             <option value="">Selecciona posición</option>
-            {posiciones.map((pos) => (<option key={pos.id} value={pos.id}>{pos.nombre}</option>))}
+            {posiciones.map((pos) => (
+              <option key={pos.id} value={pos.id}>
+                {pos.nombre}
+              </option>
+            ))}
           </select>
+
           <input
             type="text"
             value={editarNombre}
@@ -271,10 +325,15 @@ export default function Posiciones() {
             placeholder="Nuevo nombre"
             className={inputClase}
           />
+
           <button
             onClick={actualizarPosicion}
             disabled={busy || !editarId}
-            className={`mt-4 w-full py-2 rounded text-white ${busy || !editarId ? 'bg-gray-400 cursor-not-allowed' : 'bg-yellow-600 hover:bg-yellow-700'}`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              busy || !editarId
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-yellow-600 hover:bg-yellow-700'
+            }`}
           >
             Actualizar
           </button>
@@ -294,12 +353,21 @@ export default function Posiciones() {
             className={inputClase}
           >
             <option value="">Selecciona posición</option>
-            {posiciones.map((pos) => (<option key={pos.id} value={pos.id}>{pos.nombre}</option>))}
+            {posiciones.map((pos) => (
+              <option key={pos.id} value={pos.id}>
+                {pos.nombre}
+              </option>
+            ))}
           </select>
+
           <button
             disabled={!posicionSeleccionada || busy}
             onClick={() => setMostrarModal(true)}
-            className={`mt-4 w-full py-2 rounded text-white ${!posicionSeleccionada || busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              !posicionSeleccionada || busy
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-red-600 hover:bg-red-700'
+            }`}
           >
             Eliminar
           </button>

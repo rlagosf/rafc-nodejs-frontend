@@ -22,7 +22,7 @@ export default function Roles() {
   const [rolSeleccionado, setRolSeleccionado] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  // 🧭 Breadcrumb → lo pinta el layout (/admin); aquí solo sincronizamos state
+  // 🧭 Breadcrumb → lo pinta el layout (/admin)
   useEffect(() => {
     const currentPath = location.pathname;
     const bc = Array.isArray(location.state?.breadcrumb) ? location.state.breadcrumb : [];
@@ -44,7 +44,6 @@ export default function Roles() {
 
   useMobileAutoScrollTop();
 
-
   // 🔐 Auth (solo admin = 1)
   useEffect(() => {
     try {
@@ -62,7 +61,7 @@ export default function Roles() {
     }
   }, [navigate]);
 
-  // ───────── Helpers ─────────
+  // ───────── Utils ─────────
   const sanitizar = (texto) =>
     String(texto || '')
       .replace(/[<>;"']/g, '')
@@ -72,7 +71,10 @@ export default function Roles() {
   const flash = (okMsg, errMsg) => {
     if (okMsg) setMensaje(okMsg);
     if (errMsg) setError(errMsg);
-    setTimeout(() => { setMensaje(''); setError(''); }, 2500);
+    setTimeout(() => {
+      setMensaje('');
+      setError('');
+    }, 2500);
   };
 
   const toArray = (resp) => {
@@ -85,22 +87,66 @@ export default function Roles() {
     return [];
   };
 
-  // Soportar variantes con/sin slash final
-  const withVariants = (fn) => async (base, ...args) => {
-    const urls = base.endsWith('/') ? [base, base.slice(0, -1)] : [base, `${base}/`];
-    for (const u of urls) {
-      try { return await fn(u, ...args); } catch (e) {
-        const st = e?.response?.status;
-        if (st === 401 || st === 403) throw e; // auth → burbujear
-      }
-    }
-    throw new Error('ENDPOINT_VARIANTS_FAILED');
+  // ✅ error normalizado por api.js
+  const getErrStatus = (err) => err?.status ?? err?.response?.status ?? 0;
+  const getErrData = (err) => err?.data ?? err?.response?.data ?? null;
+
+  const handleAuth = () => {
+    clearToken();
+    navigate('/login', { replace: true });
   };
 
-  const getVar  = withVariants((u, cfg) => api.get(u, cfg));
+  const prettyError = (err, fallback) => {
+    const st = getErrStatus(err);
+    const data = getErrData(err);
+    const backendMsg = data?.message || data?.detail || data?.error || err?.message || null;
+
+    if (st === 401 || st === 403) return '🔒 Sesión expirada o sin permisos. Vuelve a iniciar sesión.';
+    if (st === 400) return backendMsg || '⚠️ Datos inválidos. Revisa el nombre del rol.';
+    if (st === 404) return backendMsg || '⚠️ Rol no encontrado (puede que ya haya sido eliminado).';
+
+    if (st === 409) {
+      if (data?.errno === 1451 || data?.code === 'ER_ROW_IS_REFERENCED_2') {
+        return '⚠️ No se puede eliminar: este rol está asignado a uno o más usuarios.';
+      }
+      if (data?.errno === 1062 || data?.code === 'ER_DUP_ENTRY') {
+        return '⚠️ Ya existe un rol con ese nombre.';
+      }
+      return backendMsg || '⚠️ Conflicto: no se pudo completar la acción.';
+    }
+
+    // por si el backend manda 500 pero con errno/code
+    if (data?.errno === 1451 || data?.code === 'ER_ROW_IS_REFERENCED_2') {
+      return '⚠️ No se puede eliminar: este rol está asignado a uno o más usuarios.';
+    }
+    if (data?.errno === 1062 || data?.code === 'ER_DUP_ENTRY') {
+      return '⚠️ Ya existe un rol con ese nombre.';
+    }
+
+    return backendMsg || fallback || '❌ Error inesperado.';
+  };
+
+  // ✅ variantes con y sin slash final (sin depender de err.response)
+  const withVariants = (fn) => async (base, ...args) => {
+    const urls = base.endsWith('/') ? [base, base.slice(0, -1)] : [base, `${base}/`];
+    let lastErr = null;
+
+    for (const u of urls) {
+      try {
+        return await fn(u, ...args);
+      } catch (e) {
+        lastErr = e;
+        const st = getErrStatus(e);
+        if (st === 401 || st === 403) throw e;
+      }
+    }
+    throw lastErr || new Error('ENDPOINT_VARIANTS_FAILED');
+  };
+
+  const getVar = withVariants((u, cfg) => api.get(u, cfg));
   const postVar = withVariants((u, payload, cfg) => api.post(u, payload, cfg));
-  const putVar  = withVariants((u, payload, cfg) => api.put(u, payload, cfg));
-  const delVar  = withVariants((u, cfg) => api.delete(u, cfg));
+  const putVar = withVariants((u, payload, cfg) => api.put(u, payload, cfg));
+  const delVar = withVariants((u, cfg) => api.delete(u, cfg));
 
   // ───────── Fetch ─────────
   const fetchRoles = async () => {
@@ -108,13 +154,9 @@ export default function Roles() {
       const res = await getVar('/roles');
       setRoles(toArray(res));
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError('❌ Error al obtener roles');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ Error al obtener roles'));
     }
   };
 
@@ -124,13 +166,17 @@ export default function Roles() {
       await fetchRoles();
       if (!alive) return;
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ───────── Crear ─────────
   const crearRol = async () => {
     const nombre = sanitizar(nuevoRol);
-    if (nombre.length < 3) return setError('❌ Mínimo 3 caracteres');
+    if (nombre.length < 3) return setError('⚠️ El nombre debe tener al menos 3 caracteres.');
+
     setBusy(true);
     try {
       await postVar('/roles', { nombre });
@@ -138,13 +184,9 @@ export default function Roles() {
       flash('✅ Rol creado');
       await fetchRoles();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError(err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al crear rol');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo crear el rol.'));
     } finally {
       setBusy(false);
     }
@@ -152,9 +194,10 @@ export default function Roles() {
 
   // ───────── Actualizar ─────────
   const actualizarRol = async () => {
-    if (!editarId) return setError('❌ Debes seleccionar un rol');
+    if (!editarId) return setError('⚠️ Debes seleccionar un rol.');
     const nombre = sanitizar(editarNombre);
-    if (nombre.length < 3) return setError('❌ Mínimo 3 caracteres');
+    if (nombre.length < 3) return setError('⚠️ El nombre debe tener al menos 3 caracteres.');
+
     setBusy(true);
     try {
       await putVar(`/roles/${editarId}`, { nombre });
@@ -163,13 +206,9 @@ export default function Roles() {
       flash('✅ Rol actualizado');
       await fetchRoles();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError(err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al actualizar rol');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo actualizar el rol.'));
     } finally {
       setBusy(false);
     }
@@ -181,19 +220,16 @@ export default function Roles() {
       setMostrarModal(false);
       return;
     }
+
     setBusy(true);
     try {
       await delVar(`/roles/${rolSeleccionado.id}`);
       flash('✅ Rol eliminado');
       await fetchRoles();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError(err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al eliminar');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo eliminar el rol.'));
     } finally {
       setBusy(false);
       setMostrarModal(false);
@@ -211,8 +247,6 @@ export default function Roles() {
 
   return (
     <div className={`${fondo} min-h-screen px-4 pt-4 pb-16 font-realacademy`}>
-      {/* 🚫 Sin breadcrumb local; el layout /admin usa location.state */}
-
       <h2 className="text-2xl font-bold mb-6 text-center">Gestión de Roles</h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-6xl mx-auto">
@@ -223,7 +257,9 @@ export default function Roles() {
             <p className="opacity-60">Sin roles registrados.</p>
           ) : (
             <ul className="list-disc pl-5 space-y-1">
-              {roles.map((rol) => (<li key={rol.id}>{rol.nombre ?? rol.descripcion ?? `#${rol.id}`}</li>))}
+              {roles.map((rol) => (
+                <li key={rol.id}>{rol.nombre ?? rol.descripcion ?? `#${rol.id}`}</li>
+              ))}
             </ul>
           )}
         </div>
@@ -234,14 +270,19 @@ export default function Roles() {
           <input
             type="text"
             value={nuevoRol}
-            onChange={(e) => { setNuevoRol(e.target.value); setError(''); }}
+            onChange={(e) => {
+              setNuevoRol(e.target.value);
+              setError('');
+            }}
             placeholder="Nombre del rol"
             className={inputClase}
           />
           <button
             onClick={crearRol}
             disabled={busy}
-            className={`mt-4 w-full py-2 rounded text-white ${busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
           >
             Guardar
           </button>
@@ -255,26 +296,39 @@ export default function Roles() {
             onChange={(e) => {
               const id = parseInt(e.target.value, 10);
               setEditarId(id || null);
-              const r = roles.find(x => Number(x.id) === id);
+              const r = roles.find((x) => Number(x.id) === id);
               setEditarNombre(r?.nombre || r?.descripcion || '');
               setError('');
             }}
             className={`${inputClase} mb-2`}
           >
             <option value="">Selecciona rol</option>
-            {roles.map((rol) => (<option key={rol.id} value={rol.id}>{rol.nombre ?? rol.descripcion}</option>))}
+            {roles.map((rol) => (
+              <option key={rol.id} value={rol.id}>
+                {rol.nombre ?? rol.descripcion}
+              </option>
+            ))}
           </select>
+
           <input
             type="text"
             value={editarNombre}
-            onChange={(e) => { setEditarNombre(e.target.value); setError(''); }}
+            onChange={(e) => {
+              setEditarNombre(e.target.value);
+              setError('');
+            }}
             placeholder="Nuevo nombre"
             className={inputClase}
           />
+
           <button
             onClick={actualizarRol}
             disabled={busy || !editarId}
-            className={`mt-4 w-full py-2 rounded text-white ${busy || !editarId ? 'bg-gray-400 cursor-not-allowed' : 'bg-yellow-600 hover:bg-yellow-700'}`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              busy || !editarId
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-yellow-600 hover:bg-yellow-700'
+            }`}
           >
             Actualizar
           </button>
@@ -287,19 +341,28 @@ export default function Roles() {
             value={rolSeleccionado?.id || ''}
             onChange={(e) => {
               const id = parseInt(e.target.value, 10);
-              const seleccionado = roles.find(rol => Number(rol.id) === id);
+              const seleccionado = roles.find((r) => Number(r.id) === id);
               setRolSeleccionado(seleccionado || null);
               setError('');
             }}
             className={inputClase}
           >
             <option value="">Selecciona rol</option>
-            {roles.map((rol) => (<option key={rol.id} value={rol.id}>{rol.nombre ?? rol.descripcion}</option>))}
+            {roles.map((rol) => (
+              <option key={rol.id} value={rol.id}>
+                {rol.nombre ?? rol.descripcion}
+              </option>
+            ))}
           </select>
+
           <button
             disabled={!rolSeleccionado || busy}
             onClick={() => setMostrarModal(true)}
-            className={`mt-4 w-full py-2 rounded text-white ${!rolSeleccionado || busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              !rolSeleccionado || busy
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-red-600 hover:bg-red-700'
+            }`}
           >
             Eliminar
           </button>

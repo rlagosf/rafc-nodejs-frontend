@@ -41,11 +41,10 @@ export default function TiposPago() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
-  
-  // 🔐 Auth (solo admin = 1) con getToken/clearToken
 
   useMobileAutoScrollTop();
 
+  // 🔐 Auth (solo admin = 1)
   useEffect(() => {
     try {
       const token = getToken();
@@ -62,7 +61,7 @@ export default function TiposPago() {
     }
   }, [navigate]);
 
-  // ───────── Helpers ─────────
+  // ───────── Utils ─────────
   const sanitizar = (texto) =>
     String(texto || '')
       .replace(/[<>;"']/g, '')
@@ -72,7 +71,10 @@ export default function TiposPago() {
   const flash = (okMsg, errMsg) => {
     if (okMsg) setMensaje(okMsg);
     if (errMsg) setError(errMsg);
-    setTimeout(() => { setMensaje(''); setError(''); }, 2500);
+    setTimeout(() => {
+      setMensaje('');
+      setError('');
+    }, 2500);
   };
 
   const toArray = (resp) => {
@@ -85,22 +87,67 @@ export default function TiposPago() {
     return [];
   };
 
-  // Soportar variantes con/sin slash final
-  const withVariants = (fn) => async (base, ...args) => {
-    const urls = base.endsWith('/') ? [base, base.slice(0, -1)] : [base, `${base}/`];
-    for (const u of urls) {
-      try { return await fn(u, ...args); } catch (e) {
-        const st = e?.response?.status;
-        if (st === 401 || st === 403) throw e; // auth → burbujear
-      }
-    }
-    throw new Error('ENDPOINT_VARIANTS_FAILED');
+  // ✅ Error normalizado por api.js (no depender de err.response)
+  const getErrStatus = (err) => err?.status ?? err?.response?.status ?? 0;
+  const getErrData = (err) => err?.data ?? err?.response?.data ?? null;
+
+  const handleAuth = () => {
+    clearToken();
+    navigate('/login', { replace: true });
   };
 
-  const getVar  = withVariants((u, cfg) => api.get(u, cfg));
+  // ✅ Mensajes específicos (FK / DUP / etc.)
+  const prettyError = (err, fallback) => {
+    const st = getErrStatus(err);
+    const data = getErrData(err);
+    const backendMsg = data?.message || data?.detail || data?.error || err?.message || null;
+
+    if (st === 401 || st === 403) return '🔒 Sesión expirada o sin permisos. Vuelve a iniciar sesión.';
+    if (st === 400) return backendMsg || '⚠️ Datos inválidos. Revisa el nombre.';
+    if (st === 404) return backendMsg || '⚠️ No encontrado (puede que ya haya sido eliminado).';
+
+    if (st === 409) {
+      if (data?.errno === 1451 || data?.code === 'ER_ROW_IS_REFERENCED_2') {
+        return '⚠️ No se puede eliminar: este tipo de pago está siendo usado por registros asociados.';
+      }
+      if (data?.errno === 1062 || data?.code === 'ER_DUP_ENTRY') {
+        return '⚠️ Ya existe un tipo de pago con ese nombre.';
+      }
+      return backendMsg || '⚠️ Conflicto: no se pudo completar la acción.';
+    }
+
+    // Por si el backend lo manda como 500 pero con errno/code
+    if (data?.errno === 1451 || data?.code === 'ER_ROW_IS_REFERENCED_2') {
+      return '⚠️ No se puede eliminar: este tipo de pago está siendo usado por registros asociados.';
+    }
+    if (data?.errno === 1062 || data?.code === 'ER_DUP_ENTRY') {
+      return '⚠️ Ya existe un tipo de pago con ese nombre.';
+    }
+
+    return backendMsg || fallback || '❌ Error inesperado.';
+  };
+
+  // ✅ Variantes endpoint con/sin slash final (guardando el error real)
+  const withVariants = (fn) => async (base, ...args) => {
+    const urls = base.endsWith('/') ? [base, base.slice(0, -1)] : [base, `${base}/`];
+    let lastErr = null;
+
+    for (const u of urls) {
+      try {
+        return await fn(u, ...args);
+      } catch (e) {
+        lastErr = e;
+        const st = getErrStatus(e);
+        if (st === 401 || st === 403) throw e;
+      }
+    }
+    throw lastErr || new Error('ENDPOINT_VARIANTS_FAILED');
+  };
+
+  const getVar = withVariants((u, cfg) => api.get(u, cfg));
   const postVar = withVariants((u, payload, cfg) => api.post(u, payload, cfg));
-  const putVar  = withVariants((u, payload, cfg) => api.put(u, payload, cfg));
-  const delVar  = withVariants((u, cfg) => api.delete(u, cfg));
+  const putVar = withVariants((u, payload, cfg) => api.put(u, payload, cfg));
+  const delVar = withVariants((u, cfg) => api.delete(u, cfg));
 
   // ───────── Fetch ─────────
   const fetchTipos = async () => {
@@ -108,13 +155,9 @@ export default function TiposPago() {
       const res = await getVar('/tipo-pago');
       setTipos(toArray(res));
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError('❌ Error al obtener tipos de pago');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ Error al obtener tipos de pago'));
     }
   };
 
@@ -124,13 +167,17 @@ export default function TiposPago() {
       await fetchTipos();
       if (!alive) return;
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ───────── Crear ─────────
   const crear = async () => {
     const nombre = sanitizar(nuevo);
-    if (nombre.length < 3) return setError('❌ Mínimo 3 caracteres');
+    if (nombre.length < 3) return setError('⚠️ El nombre debe tener al menos 3 caracteres.');
+
     setBusy(true);
     try {
       await postVar('/tipo-pago', { nombre });
@@ -138,13 +185,9 @@ export default function TiposPago() {
       flash('✅ Tipo de pago creado');
       await fetchTipos();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError(err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al crear');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo crear el tipo de pago.'));
     } finally {
       setBusy(false);
     }
@@ -152,9 +195,10 @@ export default function TiposPago() {
 
   // ───────── Actualizar ─────────
   const actualizar = async () => {
-    if (!editarId) return setError('❌ Debes seleccionar un tipo');
+    if (!editarId) return setError('⚠️ Debes seleccionar un tipo de pago.');
     const nombre = sanitizar(editarNombre);
-    if (nombre.length < 3) return setError('❌ Mínimo 3 caracteres');
+    if (nombre.length < 3) return setError('⚠️ El nombre debe tener al menos 3 caracteres.');
+
     setBusy(true);
     try {
       await putVar(`/tipo-pago/${editarId}`, { nombre });
@@ -163,13 +207,9 @@ export default function TiposPago() {
       flash('✅ Actualizado correctamente');
       await fetchTipos();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError(err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al actualizar');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo actualizar el tipo de pago.'));
     } finally {
       setBusy(false);
     }
@@ -181,19 +221,16 @@ export default function TiposPago() {
       setMostrarModal(false);
       return;
     }
+
     setBusy(true);
     try {
       await delVar(`/tipo-pago/${tipoSeleccionado.id}`);
       flash('✅ Tipo de pago eliminado');
       await fetchTipos();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError(err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al eliminar');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo eliminar el tipo de pago.'));
     } finally {
       setBusy(false);
       setMostrarModal(false);
@@ -211,8 +248,6 @@ export default function TiposPago() {
 
   return (
     <div className={`${fondo} min-h-screen px-4 pt-4 pb-16 font-realacademy`}>
-      {/* 🚫 Sin breadcrumb local; el layout /admin usa location.state */}
-
       <h2 className="text-2xl font-bold mb-6 text-center">Gestión de Tipos de Pago</h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-6xl mx-auto">
@@ -223,7 +258,9 @@ export default function TiposPago() {
             <p className="opacity-60">Sin tipos registrados.</p>
           ) : (
             <ul className="list-disc pl-5 space-y-1">
-              {tipos.map((t) => (<li key={t.id}>{t.nombre ?? t.descripcion ?? `#${t.id}`}</li>))}
+              {tipos.map((t) => (
+                <li key={t.id}>{t.nombre ?? t.descripcion ?? `#${t.id}`}</li>
+              ))}
             </ul>
           )}
         </div>
@@ -234,14 +271,19 @@ export default function TiposPago() {
           <input
             type="text"
             value={nuevo}
-            onChange={(e) => { setNuevo(e.target.value); setError(''); }}
+            onChange={(e) => {
+              setNuevo(e.target.value);
+              setError('');
+            }}
             placeholder="Nombre tipo"
             className={inputClase}
           />
           <button
             onClick={crear}
             disabled={busy}
-            className={`mt-4 w-full py-2 rounded text-white ${busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
           >
             Guardar
           </button>
@@ -255,26 +297,39 @@ export default function TiposPago() {
             onChange={(e) => {
               const id = parseInt(e.target.value, 10);
               setEditarId(id || null);
-              const item = tipos.find(t => Number(t.id) === id);
+              const item = tipos.find((t) => Number(t.id) === id);
               setEditarNombre(item?.nombre || item?.descripcion || '');
               setError('');
             }}
             className={`${inputClase} mb-2`}
           >
             <option value="">Selecciona tipo</option>
-            {tipos.map((t) => (<option key={t.id} value={t.id}>{t.nombre ?? t.descripcion}</option>))}
+            {tipos.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.nombre ?? t.descripcion}
+              </option>
+            ))}
           </select>
+
           <input
             type="text"
             value={editarNombre}
-            onChange={(e) => { setEditarNombre(e.target.value); setError(''); }}
+            onChange={(e) => {
+              setEditarNombre(e.target.value);
+              setError('');
+            }}
             placeholder="Nuevo nombre"
             className={inputClase}
           />
+
           <button
             onClick={actualizar}
             disabled={busy || !editarId}
-            className={`mt-4 w-full py-2 rounded text-white ${busy || !editarId ? 'bg-gray-400 cursor-not-allowed' : 'bg-yellow-600 hover:bg-yellow-700'}`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              busy || !editarId
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-yellow-600 hover:bg-yellow-700'
+            }`}
           >
             Actualizar
           </button>
@@ -287,19 +342,28 @@ export default function TiposPago() {
             value={tipoSeleccionado?.id || ''}
             onChange={(e) => {
               const id = parseInt(e.target.value, 10);
-              const seleccionado = tipos.find(t => Number(t.id) === id);
+              const seleccionado = tipos.find((t) => Number(t.id) === id);
               setTipoSeleccionado(seleccionado || null);
               setError('');
             }}
             className={inputClase}
           >
             <option value="">Selecciona tipo</option>
-            {tipos.map((t) => (<option key={t.id} value={t.id}>{t.nombre ?? t.descripcion}</option>))}
+            {tipos.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.nombre ?? t.descripcion}
+              </option>
+            ))}
           </select>
+
           <button
             disabled={!tipoSeleccionado || busy}
             onClick={() => setMostrarModal(true)}
-            className={`mt-4 w-full py-2 rounded text-white ${!tipoSeleccionado || busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              !tipoSeleccionado || busy
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-red-600 hover:bg-red-700'
+            }`}
           >
             Eliminar
           </button>

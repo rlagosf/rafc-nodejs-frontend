@@ -27,7 +27,7 @@ const Agenda = lazy(() => import("../pages/admin/agenda"));
 const ListarPagos = lazy(() => import("../pages/admin/listarPagos"));
 const Pagos = lazy(() => import("../pages/admin/pagos"));
 const JugadoresPendientes = lazy(() => import("../pages/admin/modulo-financiero/jugadoresPendientes"));
-const PowerbiFinanzas = lazy(() => import("../pages/admin/modulo-financiero/powerbiFinanzas"));
+const PowerbiFinanzas = lazy(() => import("../pages/admin/powerbiFinanzas"));
 const PagosCentralizados = lazy(() => import("../pages/admin/modulo-financiero/pagosCentralizados"));
 const EstadosCuenta = lazy(() => import("../pages/admin/estadosCuenta"));
 
@@ -105,7 +105,7 @@ export const routes = [
       { path: "gestionar-pagos", element: <ListarPagos /> },
       { path: "registrar-pago", element: <Pagos /> },
       { path: "modulo-financiero/jugadores-pendientes", element: <JugadoresPendientes /> },
-      { path: "modulo-financiero/power-bi", element: <PowerbiFinanzas /> },
+      { path: "power-bi", element: <PowerbiFinanzas /> },
       { path: "modulo-financiero/pagos-centralizados", element: <PagosCentralizados /> },
       { path: "estados-cuenta", element: <EstadosCuenta /> },
 

@@ -42,7 +42,6 @@ export default function Categorias() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
-
   useMobileAutoScrollTop();
 
   // ───────── Auth (solo admin=1) ─────────
@@ -55,9 +54,7 @@ export default function Categorias() {
       if (decoded?.exp && decoded.exp < now) throw new Error('expired');
       const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
       const rol = Number.isFinite(Number(rawRol)) ? Number(rawRol) : 0;
-      if (rol !== 1) {
-        navigate('/admin', { replace: true });
-      }
+      if (rol !== 1) navigate('/admin', { replace: true });
     } catch {
       clearToken();
       navigate('/login', { replace: true });
@@ -74,72 +71,100 @@ export default function Categorias() {
   const flash = (okMsg, errMsg) => {
     if (okMsg) setMensaje(okMsg);
     if (errMsg) setError(errMsg);
-    setTimeout(() => { setMensaje(''); setError(''); }, 2500);
+    setTimeout(() => {
+      setMensaje('');
+      setError('');
+    }, 2500);
   };
 
-  // ───────── Helpers endpoints tolerantes ─────────
-  const getWithVariants = async (base) => {
+  // ✅ Con tu api.js interceptor: el error viene normalizado (status/data/message)
+  const getErrStatus = (err) => err?.status ?? err?.response?.status ?? 0;
+  const getErrData = (err) => err?.data ?? err?.response?.data ?? null;
+
+  const prettyError = (err, fallback) => {
+    const st = getErrStatus(err);
+    const data = getErrData(err);
+
+    // Mensaje directo desde backend si viene
+    const backendMsg =
+      data?.message || data?.detail || data?.error || err?.message || null;
+
+    // Auth
+    if (st === 401 || st === 403) {
+      return '🔒 Sesión expirada o sin permisos. Vuelve a iniciar sesión.';
+    }
+
+    // Validación / zod
+    if (st === 400) {
+      return backendMsg || '⚠️ Datos inválidos. Revisa el nombre.';
+    }
+
+    // Conflicto: duplicado / FK / regla negocio
+    if (st === 409) {
+      // Si backend no lo traduce, intentamos detectar patrón MySQL
+      if (data?.errno === 1451 || data?.code === 'ER_ROW_IS_REFERENCED_2') {
+        return '⚠️ No se puede eliminar: la categoría está en uso por otros registros.';
+      }
+      if (data?.errno === 1062 || data?.code === 'ER_DUP_ENTRY') {
+        return '⚠️ Ya existe una categoría con ese nombre.';
+      }
+      return backendMsg || '⚠️ No se pudo completar la acción por una restricción del sistema.';
+    }
+
+    if (st === 404) {
+      return backendMsg || '⚠️ Registro no encontrado (puede que ya haya sido eliminado).';
+    }
+
+    // Default (500 / red)
+    return backendMsg || fallback || '❌ Error inesperado.';
+  };
+
+  const handleAuth = () => {
+    clearToken();
+    navigate('/login', { replace: true });
+  };
+
+  // ───────── Helpers endpoints tolerantes (slash final) ─────────
+  const withVariants = (fn) => async (base, ...args) => {
     const urls = base.endsWith('/') ? [base, base.slice(0, -1)] : [base, `${base}/`];
+    let lastErr = null;
+
     for (const u of urls) {
-      try { return await api.get(u); } catch (e) {
-        const st = e?.response?.status;
+      try {
+        return await fn(u, ...args);
+      } catch (e) {
+        lastErr = e;
+        const st = getErrStatus(e);
         if (st === 401 || st === 403) throw e;
       }
     }
-    throw new Error('GET_FAIL');
+    throw lastErr || new Error('ENDPOINT_VARIANTS_FAILED');
   };
 
-  const postWithVariants = async (base, payload) => {
-    const urls = base.endsWith('/') ? [base, base.slice(0, -1)] : [base, `${base}/`];
-    for (const u of urls) {
-      try { return await api.post(u, payload); } catch (e) {
-        const st = e?.response?.status;
-        if (st === 401 || st === 403) throw e;
-      }
-    }
-    throw new Error('POST_FAIL');
-  };
-
-  const putWithVariants = async (base, payload) => {
-    const urls = base.endsWith('/') ? [base, base.slice(0, -1)] : [base, `${base}/`];
-    for (const u of urls) {
-      try { return await api.put(u, payload); } catch (e) {
-        const st = e?.response?.status;
-        if (st === 401 || st === 403) throw e;
-      }
-    }
-    throw new Error('PUT_FAIL');
-  };
-
-  const deleteWithVariants = async (base) => {
-    const urls = base.endsWith('/') ? [base, base.slice(0, -1)] : [base, `${base}/`];
-    for (const u of urls) {
-      try { return await api.delete(u); } catch (e) {
-        const st = e?.response?.status;
-        if (st === 401 || st === 403) throw e;
-      }
-    }
-    throw new Error('DEL_FAIL');
-  };
+  const getVar = withVariants((u, c) => api.get(u, c));
+  const postVar = withVariants((u, p, c) => api.post(u, p, c));
+  const putVar = withVariants((u, p, c) => api.put(u, p, c));
+  const delVar = withVariants((u, c) => api.delete(u, c));
 
   // ───────── Fetch ─────────
   const fetchCategorias = async () => {
     try {
-      const res = await getWithVariants('/categorias');
+      const res = await getVar('/categorias');
       const d = res?.data;
-      const lista = Array.isArray(d) ? d
-        : Array.isArray(d?.items) ? d.items
-        : Array.isArray(d?.results) ? d.results
+
+      const lista = Array.isArray(d)
+        ? d
+        : Array.isArray(d?.items)
+        ? d.items
+        : Array.isArray(d?.results)
+        ? d.results
         : [];
+
       setCategorias(lista);
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError('❌ Error al obtener categorías');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ Error al obtener categorías'));
     }
   };
 
@@ -149,28 +174,27 @@ export default function Categorias() {
       await fetchCategorias();
       if (!alive) return;
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ───────── Crear ─────────
   const crearCategoria = async () => {
     const nombre = limpiarTexto(nuevaCategoria);
-    if (nombre.length < 3) return setError('❌ Mínimo 3 caracteres');
+    if (nombre.length < 3) return setError('⚠️ El nombre debe tener al menos 3 caracteres.');
+
     setBusy(true);
     try {
-      await postWithVariants('/categorias', { nombre });
+      await postVar('/categorias', { nombre });
       setNuevaCategoria('');
       flash('✅ Categoría creada');
       await fetchCategorias();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      const msg = err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al crear categoría';
-      setError(msg);
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo crear la categoría.'));
     } finally {
       setBusy(false);
     }
@@ -178,25 +202,21 @@ export default function Categorias() {
 
   // ───────── Actualizar ─────────
   const actualizarCategoria = async () => {
-    if (!editarId) return setError('❌ Debes seleccionar una categoría');
+    if (!editarId) return setError('⚠️ Debes seleccionar una categoría.');
     const nombre = limpiarTexto(editarNombre);
-    if (nombre.length < 3) return setError('❌ Mínimo 3 caracteres');
+    if (nombre.length < 3) return setError('⚠️ El nombre debe tener al menos 3 caracteres.');
+
     setBusy(true);
     try {
-      await putWithVariants(`/categorias/${editarId}`, { nombre });
+      await putVar(`/categorias/${editarId}`, { nombre });
       setEditarId(null);
       setEditarNombre('');
       flash('✅ Categoría actualizada');
       await fetchCategorias();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      const msg = err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al actualizar categoría';
-      setError(msg);
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo actualizar la categoría.'));
     } finally {
       setBusy(false);
     }
@@ -208,20 +228,16 @@ export default function Categorias() {
       setMostrarModal(false);
       return;
     }
+
     setBusy(true);
     try {
-      await deleteWithVariants(`/categorias/${categoriaSeleccionada.id}`);
+      await delVar(`/categorias/${categoriaSeleccionada.id}`);
       flash('✅ Categoría eliminada');
       await fetchCategorias();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      const msg = err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al eliminar';
-      setError(msg);
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo eliminar la categoría.'));
     } finally {
       setBusy(false);
       setMostrarModal(false);
@@ -235,15 +251,15 @@ export default function Categorias() {
   const inputClase =
     (darkMode
       ? 'bg-[#1f2937] text-white border border-gray-600 placeholder-gray-400'
-      : 'bg-white text-black border border-gray-300 placeholder-gray-500') + ' w-full p-2 rounded';
+      : 'bg-white text-black border border-gray-300 placeholder-gray-500') +
+    ' w-full p-2 rounded';
 
   return (
     <div className={`${fondo} min-h-screen px-4 pt-4 pb-16 font-realacademy`}>
-      {/* 🚫 Sin breadcrumb local; el layout /admin lo pinta con location.state */}
-
       <h2 className="text-2xl font-bold mb-6 text-center">Gestión de Categorías</h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-6xl mx-auto">
+        {/* Listado */}
         <div className={`${tarjeta} border shadow-md rounded-xl p-6`}>
           <h3 className="text-lg font-bold mb-4">📋 Listar Categorías</h3>
           {categorias.length === 0 ? (
@@ -257,24 +273,31 @@ export default function Categorias() {
           )}
         </div>
 
+        {/* Crear */}
         <div className={`${tarjeta} border shadow-md rounded-xl p-6`}>
           <h3 className="text-lg font-bold mb-4">➕ Crear Categoría</h3>
           <input
             type="text"
             value={nuevaCategoria}
-            onChange={(e) => { setError(''); setNuevaCategoria(e.target.value); }}
+            onChange={(e) => {
+              setError('');
+              setNuevaCategoria(e.target.value);
+            }}
             placeholder="Nombre categoría"
             className={inputClase}
           />
           <button
             onClick={crearCategoria}
             disabled={busy}
-            className={`mt-4 w-full py-2 rounded text-white ${busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
           >
             Guardar
           </button>
         </div>
 
+        {/* Editar */}
         <div className={`${tarjeta} border shadow-md rounded-xl p-6`}>
           <h3 className="text-lg font-bold mb-4">✏️ Modificar Categoría</h3>
           <select
@@ -290,9 +313,12 @@ export default function Categorias() {
           >
             <option value="">Selecciona categoría</option>
             {categorias.map((cat) => (
-              <option key={cat.id} value={cat.id}>{cat.nombre ?? cat.descripcion}</option>
+              <option key={cat.id} value={cat.id}>
+                {cat.nombre ?? cat.descripcion}
+              </option>
             ))}
           </select>
+
           <input
             type="text"
             value={editarNombre}
@@ -300,22 +326,26 @@ export default function Categorias() {
             placeholder="Nuevo nombre"
             className={inputClase}
           />
+
           <button
             onClick={actualizarCategoria}
             disabled={busy || !editarId}
-            className={`mt-4 w-full py-2 rounded text-white ${busy || !editarId ? 'bg-gray-400 cursor-not-allowed' : 'bg-yellow-600 hover:bg-yellow-700'}`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              busy || !editarId ? 'bg-gray-400 cursor-not-allowed' : 'bg-yellow-600 hover:bg-yellow-700'
+            }`}
           >
             Actualizar
           </button>
         </div>
 
+        {/* Eliminar */}
         <div className={`${tarjeta} border shadow-md rounded-xl p-6`}>
           <h3 className="text-lg font-bold mb-4">🗑️ Eliminar Categoría</h3>
           <select
             value={categoriaSeleccionada?.id || ''}
             onChange={(e) => {
               const id = parseInt(e.target.value);
-              const seleccionada = categorias.find(cat => Number(cat.id) === id);
+              const seleccionada = categorias.find((cat) => Number(cat.id) === id);
               setCategoriaSeleccionada(seleccionada || null);
               setError('');
             }}
@@ -323,14 +353,19 @@ export default function Categorias() {
           >
             <option value="">Selecciona categoría</option>
             {categorias.map((cat) => (
-              <option key={cat.id} value={cat.id}>{cat.nombre ?? cat.descripcion}</option>
+              <option key={cat.id} value={cat.id}>
+                {cat.nombre ?? cat.descripcion}
+              </option>
             ))}
           </select>
+
           <button
             disabled={!categoriaSeleccionada || busy}
             onClick={() => setMostrarModal(true)}
             className={`mt-4 w-full py-2 rounded text-white ${
-              !categoriaSeleccionada || busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'
+              !categoriaSeleccionada || busy
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-red-600 hover:bg-red-700'
             }`}
           >
             Eliminar

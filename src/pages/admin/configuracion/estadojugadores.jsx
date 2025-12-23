@@ -1,4 +1,4 @@
-// src/pages/admin/config/EstadoJugadores.jsx
+// src/pages/admin/config/EstablecimientosEducacionales.jsx
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
@@ -7,34 +7,50 @@ import { useTheme } from '../../../context/ThemeContext';
 import Modal from '../../../components/modal';
 import { useMobileAutoScrollTop } from '../../../hooks/useMobileScrollTop';
 
-export default function EstadoJugadores() {
+export default function EstablecimientosEducacionales() {
   const { darkMode } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [estados, setEstados] = useState([]);
-  const [nuevoEstado, setNuevoEstado] = useState('');
+  const [establecimientos, setEstablecimientos] = useState([]);
+  const [nuevo, setNuevo] = useState('');
   const [editarId, setEditarId] = useState(null);
   const [editarNombre, setEditarNombre] = useState('');
   const [mensaje, setMensaje] = useState('');
   const [error, setError] = useState('');
   const [mostrarModal, setMostrarModal] = useState(false);
-  const [estadoSeleccionado, setEstadoSeleccionado] = useState(null);
+  const [seleccionado, setSeleccionado] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  // 🧭 Breadcrumb → lo pinta el layout (/admin)
+  /* ───────────────────────────────
+     📌 Breadcrumb abreviado (solo móvil)
+  ─────────────────────────────── */
+  const abreviar = (txt) => {
+    if (!txt) return '';
+    if (window.innerWidth > 640) return txt;
+    if (txt.length <= 14) return txt;
+
+    return txt
+      .split(' ')
+      .map((p) => (p.length > 6 ? p.slice(0, 6) + '.' : p))
+      .join(' ');
+  };
+
+  useMobileAutoScrollTop();
+
   useEffect(() => {
     const currentPath = location.pathname;
     const bc = Array.isArray(location.state?.breadcrumb) ? location.state.breadcrumb : [];
     const last = bc[bc.length - 1];
-    if (!last || last.label !== 'Estados de Jugadores') {
+
+    if (!last || last.label !== 'Establecimientos Educacionales') {
       navigate(currentPath, {
         replace: true,
         state: {
           ...(location.state || {}),
           breadcrumb: [
-            { label: 'Configuración', to: '/admin/configuracion' },
-            { label: 'Estados de Jugadores', to: currentPath },
+            { label: abreviar('Configuración'), to: '/admin/configuracion' },
+            { label: abreviar('Establecimientos Educacionales'), to: currentPath },
           ],
         },
       });
@@ -42,10 +58,9 @@ export default function EstadoJugadores() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
-  useMobileAutoScrollTop();
-
-
-  // 🔐 Auth (solo admin = 1) con rafc_token
+  /* ───────────────────────────────
+     🔐 Auth solo admins
+  ─────────────────────────────── */
   useEffect(() => {
     try {
       const token = getToken();
@@ -53,8 +68,9 @@ export default function EstadoJugadores() {
       const decoded = jwtDecode(token);
       const now = Math.floor(Date.now() / 1000);
       if (decoded?.exp && decoded.exp < now) throw new Error('expired');
+
       const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
-      const rol = Number.isFinite(Number(rawRol)) ? Number(rawRol) : 0;
+      const rol = Number(rawRol);
       if (rol !== 1) navigate('/admin', { replace: true });
     } catch {
       clearToken();
@@ -62,7 +78,9 @@ export default function EstadoJugadores() {
     }
   }, [navigate]);
 
-  // ───────── Helpers ─────────
+  /* ───────────────────────────────
+     Utils
+  ─────────────────────────────── */
   const sanitizar = (texto) =>
     String(texto || '')
       .replace(/[<>;"']/g, '')
@@ -72,175 +90,234 @@ export default function EstadoJugadores() {
   const flash = (okMsg, errMsg) => {
     if (okMsg) setMensaje(okMsg);
     if (errMsg) setError(errMsg);
-    setTimeout(() => { setMensaje(''); setError(''); }, 2500);
+    setTimeout(() => {
+      setMensaje('');
+      setError('');
+    }, 2500);
   };
 
   const toArray = (resp) => {
-    const d = resp?.data ?? resp ?? [];
+    const d = resp?.data ?? resp;
     if (Array.isArray(d)) return d;
     if (Array.isArray(d?.items)) return d.items;
     if (Array.isArray(d?.results)) return d.results;
     if (d?.ok && Array.isArray(d.items)) return d.items;
-    if (d?.ok && Array.isArray(d.data)) return d.data;
     return [];
+  };
+
+  // ✅ con tu api.js interceptor: error normalizado
+  const getErrStatus = (err) => err?.status ?? err?.response?.status ?? 0;
+  const getErrData = (err) => err?.data ?? err?.response?.data ?? null;
+
+  const prettyError = (err, fallback) => {
+    const st = getErrStatus(err);
+    const data = getErrData(err);
+
+    const backendMsg = data?.message || data?.detail || data?.error || err?.message || null;
+
+    if (st === 401 || st === 403) {
+      return '🔒 Sesión expirada o sin permisos. Vuelve a iniciar sesión.';
+    }
+
+    if (st === 400) {
+      return backendMsg || '⚠️ Datos inválidos. Revisa el nombre.';
+    }
+
+    if (st === 404) {
+      return backendMsg || '⚠️ No encontrado (puede que ya haya sido eliminado).';
+    }
+
+    if (st === 409) {
+      // FK MySQL
+      if (data?.errno === 1451 || data?.code === 'ER_ROW_IS_REFERENCED_2') {
+        return '⚠️ No se puede eliminar: hay jugador(es) asociados a este establecimiento.';
+      }
+      // duplicado MySQL
+      if (data?.errno === 1062 || data?.code === 'ER_DUP_ENTRY') {
+        return '⚠️ Ya existe un establecimiento con ese nombre.';
+      }
+      return backendMsg || '⚠️ Conflicto: no se pudo completar la acción.';
+    }
+
+    // algunos backends devuelven 500 con errno
+    if (data?.errno === 1451 || data?.code === 'ER_ROW_IS_REFERENCED_2') {
+      return '⚠️ No se puede eliminar: hay jugador(es) asociados a este establecimiento.';
+    }
+    if (data?.errno === 1062 || data?.code === 'ER_DUP_ENTRY') {
+      return '⚠️ Ya existe un establecimiento con ese nombre.';
+    }
+
+    return backendMsg || fallback || '❌ Error inesperado.';
+  };
+
+  const handleAuth = () => {
+    clearToken();
+    navigate('/login', { replace: true });
   };
 
   const withVariants = (fn) => async (base, ...args) => {
     const urls = base.endsWith('/') ? [base, base.slice(0, -1)] : [base, `${base}/`];
+    let lastErr = null;
+
     for (const u of urls) {
-      try { return await fn(u, ...args); } catch (e) {
-        const st = e?.response?.status;
-        if (st === 401 || st === 403) throw e; // auth → burbujear
+      try {
+        return await fn(u, ...args);
+      } catch (e) {
+        lastErr = e;
+        const st = getErrStatus(e);
+        if (st === 401 || st === 403) throw e;
       }
     }
-    throw new Error('ENDPOINT_VARIANTS_FAILED');
+    throw lastErr || new Error('ENDPOINT_VARIANTS_FAILED');
   };
 
-  const getVar = withVariants((u, cfg) => api.get(u, cfg));
-  const postVar = withVariants((u, payload, cfg) => api.post(u, payload, cfg));
-  const putVar = withVariants((u, payload, cfg) => api.put(u, payload, cfg));
-  const delVar = withVariants((u, cfg) => api.delete(u, cfg));
+  const getVar = withVariants((u, c) => api.get(u, c));
+  const postVar = withVariants((u, p, c) => api.post(u, p, c));
+  const putVar = withVariants((u, p, c) => api.put(u, p, c));
+  const delVar = withVariants((u, c) => api.delete(u, c));
 
-  // ───────── Fetch ─────────
-  const fetchEstados = async () => {
+  /* ───────────────────────────────
+     Fetch
+  ─────────────────────────────── */
+  const fetchDatos = async () => {
     try {
-      const res = await getVar('/estado');
-      setEstados(toArray(res));
+      const res = await getVar('/establecimientos-educ');
+      setEstablecimientos(toArray(res));
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError('❌ Error al obtener estados');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ Error al obtener establecimientos'));
     }
   };
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      await fetchEstados();
+      await fetchDatos();
       if (!alive) return;
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ───────── Crear ─────────
-  const crearEstado = async () => {
-    const nombre = sanitizar(nuevoEstado);
-    if (nombre.length < 3) return setError('❌ Mínimo 3 caracteres');
+  /* ───────────────────────────────
+     Crear
+  ─────────────────────────────── */
+  const crear = async () => {
+    const nombre = sanitizar(nuevo);
+    if (nombre.length < 3) return setError('⚠️ El nombre debe tener al menos 3 caracteres.');
+
     setBusy(true);
     try {
-      await postVar('/estado', { nombre });
-      setNuevoEstado('');
-      flash('✅ Estado creado');
-      await fetchEstados();
+      await postVar('/establecimientos-educ', { nombre });
+      setNuevo('');
+      flash('✅ Establecimiento creado');
+      await fetchDatos();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError(err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al crear estado');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo crear el establecimiento.'));
     } finally {
       setBusy(false);
     }
   };
 
-  // ───────── Actualizar ─────────
-  const actualizarEstado = async () => {
-    if (!editarId) return setError('❌ Debes seleccionar un estado');
+  /* ───────────────────────────────
+     Actualizar
+  ─────────────────────────────── */
+  const actualizar = async () => {
+    if (!editarId) return setError('⚠️ Debes seleccionar un establecimiento.');
     const nombre = sanitizar(editarNombre);
-    if (nombre.length < 3) return setError('❌ Mínimo 3 caracteres');
+    if (nombre.length < 3) return setError('⚠️ El nombre debe tener al menos 3 caracteres.');
+
     setBusy(true);
     try {
-      await putVar(`/estado/${editarId}`, { nombre });
+      await putVar(`/establecimientos-educ/${editarId}`, { nombre });
       setEditarId(null);
       setEditarNombre('');
-      flash('✅ Estado actualizado');
-      await fetchEstados();
+      flash('✅ Establecimiento actualizado');
+      await fetchDatos();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError(err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al actualizar estado');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo actualizar el establecimiento.'));
     } finally {
       setBusy(false);
     }
   };
 
-  // ───────── Eliminar ─────────
-  const confirmarEliminacion = async () => {
-    if (!estadoSeleccionado?.id) {
-      setMostrarModal(false);
-      return;
-    }
+  /* ───────────────────────────────
+     Eliminar
+  ─────────────────────────────── */
+  const eliminar = async () => {
+    if (!seleccionado?.id) return setMostrarModal(false);
+
     setBusy(true);
     try {
-      await delVar(`/estado/${estadoSeleccionado.id}`);
-      flash('✅ Estado eliminado');
-      await fetchEstados();
+      await delVar(`/establecimientos-educ/${seleccionado.id}`);
+      flash('✅ Establecimiento eliminado');
+      await fetchDatos();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError(err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al eliminar');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo eliminar el establecimiento.'));
     } finally {
       setBusy(false);
       setMostrarModal(false);
-      setEstadoSeleccionado(null);
+      setSeleccionado(null);
     }
   };
 
-  // 🎨 Estilos
+  /* ───────────────────────────────
+     UI
+  ─────────────────────────────── */
   const fondo = darkMode ? 'bg-[#111827] text-white' : 'bg-white text-[#1d0b0b]';
   const tarjeta = darkMode ? 'bg-[#1f2937] border-gray-700' : 'bg-white border-gray-200';
   const inputClase =
     (darkMode
       ? 'bg-[#1f2937] text-white border border-gray-600 placeholder-gray-400'
-      : 'bg-white text-black border border-gray-300 placeholder-gray-500') + ' w-full p-2 rounded';
+      : 'bg-white text-black border border-gray-300 placeholder-gray-500') +
+    ' w-full p-2 rounded';
 
   return (
     <div className={`${fondo} min-h-screen px-4 pt-4 pb-16 font-realacademy`}>
-      {/* 🚫 Sin breadcrumb local; el layout /admin usa location.state */}
-
-      <h2 className="text-2xl font-bold mb-6 text-center">Gestión de Estados de Jugadores</h2>
+      <h2 className="text-2xl font-bold mb-6 text-center">Establecimientos Educacionales</h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-6xl mx-auto">
-        {/* Listar */}
+        {/* Listado */}
         <div className={`${tarjeta} border shadow-md rounded-xl p-6`}>
-          <h3 className="text-lg font-bold mb-4">📋 Listar Estados</h3>
-          {estados.length === 0 ? (
-            <p className="opacity-60">Sin estados registrados.</p>
+          <h3 className="text-lg font-bold mb-4">📋 Listado</h3>
+          {establecimientos.length === 0 ? (
+            <p className="opacity-60">Sin establecimientos registrados.</p>
           ) : (
             <ul className="list-disc pl-5 space-y-1">
-              {estados.map((estado) => (<li key={estado.id}>{estado.nombre ?? estado.descripcion ?? `#${estado.id}`}</li>))}
+              {establecimientos.map((e) => (
+                <li key={e.id}>{e.nombre ?? `#${e.id}`}</li>
+              ))}
             </ul>
           )}
         </div>
 
         {/* Crear */}
         <div className={`${tarjeta} border shadow-md rounded-xl p-6`}>
-          <h3 className="text-lg font-bold mb-4">➕ Crear Estado</h3>
+          <h3 className="text-lg font-bold mb-4">➕ Crear</h3>
           <input
-            type="text"
-            value={nuevoEstado}
-            onChange={(e) => { setNuevoEstado(e.target.value); setError(''); }}
-            placeholder="Nombre estado"
+            value={nuevo}
+            onChange={(e) => {
+              setNuevo(e.target.value);
+              setError('');
+            }}
+            placeholder="Nombre"
             className={inputClase}
           />
           <button
-            onClick={crearEstado}
+            onClick={crear}
             disabled={busy}
-            className={`mt-4 w-full py-2 rounded text-white ${busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
           >
             Guardar
           </button>
@@ -248,34 +325,40 @@ export default function EstadoJugadores() {
 
         {/* Editar */}
         <div className={`${tarjeta} border shadow-md rounded-xl p-6`}>
-          <h3 className="text-lg font-bold mb-4">✏️ Modificar Estado</h3>
+          <h3 className="text-lg font-bold mb-4">✏️ Editar</h3>
           <select
             value={editarId || ''}
             onChange={(e) => {
-              const id = parseInt(e.target.value, 10);
+              const id = Number(e.target.value);
               setEditarId(id || null);
-              const seleccionado = estados.find((est) => Number(est.id) === id);
-              setEditarNombre(seleccionado?.nombre || seleccionado?.descripcion || '');
+              setEditarNombre(establecimientos.find((x) => x.id === id)?.nombre || '');
               setError('');
             }}
             className={`${inputClase} mb-2`}
           >
-            <option value="">Selecciona estado</option>
-            {estados.map((estado) => (
-              <option key={estado.id} value={estado.id}>{estado.nombre ?? estado.descripcion}</option>
+            <option value="">Selecciona</option>
+            {establecimientos.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.nombre}
+              </option>
             ))}
           </select>
+
           <input
-            type="text"
             value={editarNombre}
             onChange={(e) => setEditarNombre(e.target.value)}
             placeholder="Nuevo nombre"
             className={inputClase}
           />
+
           <button
-            onClick={actualizarEstado}
+            onClick={actualizar}
             disabled={busy || !editarId}
-            className={`mt-4 w-full py-2 rounded text-white ${busy || !editarId ? 'bg-gray-400 cursor-not-allowed' : 'bg-yellow-600 hover:bg-yellow-700'}`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              busy || !editarId
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-yellow-600 hover:bg-yellow-700'
+            }`}
           >
             Actualizar
           </button>
@@ -283,26 +366,33 @@ export default function EstadoJugadores() {
 
         {/* Eliminar */}
         <div className={`${tarjeta} border shadow-md rounded-xl p-6`}>
-          <h3 className="text-lg font-bold mb-4">🗑️ Eliminar Estado</h3>
+          <h3 className="text-lg font-bold mb-4">🗑️ Eliminar</h3>
           <select
-            value={estadoSeleccionado?.id || ''}
+            value={seleccionado?.id || ''}
             onChange={(e) => {
-              const id = parseInt(e.target.value, 10);
-              const seleccionado = estados.find((est) => Number(est.id) === id);
-              setEstadoSeleccionado(seleccionado || null);
+              const id = Number(e.target.value);
+              const sel = establecimientos.find((x) => x.id === id);
+              setSeleccionado(sel || null);
               setError('');
             }}
             className={inputClase}
           >
-            <option value="">Selecciona estado</option>
-            {estados.map((estado) => (
-              <option key={estado.id} value={estado.id}>{estado.nombre ?? estado.descripcion}</option>
+            <option value="">Selecciona</option>
+            {establecimientos.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.nombre}
+              </option>
             ))}
           </select>
+
           <button
-            disabled={!estadoSeleccionado || busy}
             onClick={() => setMostrarModal(true)}
-            className={`mt-4 w-full py-2 rounded text-white ${!estadoSeleccionado || busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
+            disabled={!seleccionado || busy}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              !seleccionado || busy
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-red-600 hover:bg-red-700'
+            }`}
           >
             Eliminar
           </button>
@@ -315,11 +405,7 @@ export default function EstadoJugadores() {
         </p>
       )}
 
-      <Modal
-        visible={mostrarModal}
-        onConfirm={confirmarEliminacion}
-        onCancel={() => setMostrarModal(false)}
-      />
+      <Modal visible={mostrarModal} onConfirm={eliminar} onCancel={() => setMostrarModal(false)} />
     </div>
   );
 }

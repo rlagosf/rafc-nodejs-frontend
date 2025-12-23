@@ -1,11 +1,11 @@
 // src/pages/admin/modulo-financiero/powerbiFinanzas.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useTheme } from "../../../context/ThemeContext";
-import api, { getToken, clearToken } from "../../../services/api";
+import { useTheme } from "../../context/ThemeContext";
+import api, { getToken, clearToken } from "../../services/api";
 import { jwtDecode } from "jwt-decode";
-import IsLoading from "../../../components/isLoading";
-import { useMobileAutoScrollTop } from "../../../hooks/useMobileScrollTop";
+import IsLoading from "../../components/isLoading";
+import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 import {
   Chart,
   BarElement,
@@ -62,6 +62,8 @@ export default function PowerbiFinanzas() {
 
   // 🧭 Inyectar breadcrumb correcto si no viene desde el dashboard
   // Queremos: Inicio / Estados de Cuenta / Power BI financiero
+  // 🧭 Inyectar breadcrumb correcto si no viene desde el dashboard
+  // Queremos: Inicio / Power BI financiero
   useEffect(() => {
     if (!Array.isArray(location.state?.breadcrumb)) {
       navigate(location.pathname + location.search, {
@@ -69,13 +71,13 @@ export default function PowerbiFinanzas() {
         state: {
           ...(location.state || {}),
           breadcrumb: [
-            { to: "/admin/estados-cuenta", label: "Estados de Cuenta" },
-            { to: location.pathname, label: "Power BI financiero" },
+            { to: "/admin/powerbi-finanzas", label: "Power BI financiero" },
           ],
         },
       });
     }
   }, [location, navigate]);
+
 
   // Helpers para fetch (mismo estilo que EstadosCuenta/PagosCentralizados)
   const normalizeListResponse = (res) => {

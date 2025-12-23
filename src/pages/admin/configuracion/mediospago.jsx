@@ -44,8 +44,7 @@ export default function MediosPago() {
 
   useMobileAutoScrollTop();
 
-
-  // 🔐 Auth (solo admin = 1) con rafc_token gestionado por getToken/clearToken
+  // 🔐 Auth (solo admin = 1)
   useEffect(() => {
     try {
       const token = getToken();
@@ -72,7 +71,10 @@ export default function MediosPago() {
   const flash = (okMsg, errMsg) => {
     if (okMsg) setMensaje(okMsg);
     if (errMsg) setError(errMsg);
-    setTimeout(() => { setMensaje(''); setError(''); }, 2500);
+    setTimeout(() => {
+      setMensaje('');
+      setError('');
+    }, 2500);
   };
 
   const toArray = (resp) => {
@@ -85,16 +87,69 @@ export default function MediosPago() {
     return [];
   };
 
+  // ✅ con tu api.js: error normalizado
+  const getErrStatus = (err) => err?.status ?? err?.response?.status ?? 0;
+  const getErrData = (err) => err?.data ?? err?.response?.data ?? null;
+
+  const prettyError = (err, fallback) => {
+    const st = getErrStatus(err);
+    const data = getErrData(err);
+
+    const backendMsg = data?.message || data?.detail || data?.error || err?.message || null;
+
+    if (st === 401 || st === 403) {
+      return '🔒 Sesión expirada o sin permisos. Vuelve a iniciar sesión.';
+    }
+
+    if (st === 400) {
+      return backendMsg || '⚠️ Datos inválidos. Revisa el nombre.';
+    }
+
+    if (st === 404) {
+      return backendMsg || '⚠️ No encontrado (puede que ya haya sido eliminado).';
+    }
+
+    if (st === 409) {
+      if (data?.errno === 1451 || data?.code === 'ER_ROW_IS_REFERENCED_2') {
+        return '⚠️ No se puede eliminar: este medio de pago está en uso.';
+      }
+      if (data?.errno === 1062 || data?.code === 'ER_DUP_ENTRY') {
+        return '⚠️ Ya existe un medio de pago con ese nombre.';
+      }
+      return backendMsg || '⚠️ Conflicto: no se pudo completar la acción.';
+    }
+
+    // si backend devuelve 500 pero expone errno/code
+    if (data?.errno === 1451 || data?.code === 'ER_ROW_IS_REFERENCED_2') {
+      return '⚠️ No se puede eliminar: este medio de pago está en uso.';
+    }
+    if (data?.errno === 1062 || data?.code === 'ER_DUP_ENTRY') {
+      return '⚠️ Ya existe un medio de pago con ese nombre.';
+    }
+
+    return backendMsg || fallback || '❌ Error inesperado.';
+  };
+
+  const handleAuth = () => {
+    clearToken();
+    navigate('/login', { replace: true });
+  };
+
   // Acepta variantes con y sin slash final
   const withVariants = (fn) => async (base, ...args) => {
     const urls = base.endsWith('/') ? [base, base.slice(0, -1)] : [base, `${base}/`];
+    let lastErr = null;
+
     for (const u of urls) {
-      try { return await fn(u, ...args); } catch (e) {
-        const st = e?.response?.status;
-        if (st === 401 || st === 403) throw e; // auth → burbujear
+      try {
+        return await fn(u, ...args);
+      } catch (e) {
+        lastErr = e;
+        const st = getErrStatus(e);
+        if (st === 401 || st === 403) throw e;
       }
     }
-    throw new Error('ENDPOINT_VARIANTS_FAILED');
+    throw lastErr || new Error('ENDPOINT_VARIANTS_FAILED');
   };
 
   const getVar = withVariants((u, cfg) => api.get(u, cfg));
@@ -108,13 +163,9 @@ export default function MediosPago() {
       const res = await getVar('/medio-pago');
       setMedios(toArray(res));
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError('❌ Error al obtener medios de pago');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ Error al obtener medios de pago'));
     }
   };
 
@@ -124,13 +175,17 @@ export default function MediosPago() {
       await fetchMedios();
       if (!alive) return;
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ───────── Crear ─────────
   const crearMedio = async () => {
     const nombre = sanitizar(nuevoMedio);
-    if (nombre.length < 3) return setError('❌ Mínimo 3 caracteres');
+    if (nombre.length < 3) return setError('⚠️ El nombre debe tener al menos 3 caracteres.');
+
     setBusy(true);
     try {
       await postVar('/medio-pago', { nombre });
@@ -138,13 +193,9 @@ export default function MediosPago() {
       flash('✅ Medio de pago creado');
       await fetchMedios();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError(err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al crear medio de pago');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo crear el medio de pago.'));
     } finally {
       setBusy(false);
     }
@@ -152,9 +203,10 @@ export default function MediosPago() {
 
   // ───────── Actualizar ─────────
   const actualizarMedio = async () => {
-    if (!editarId) return setError('❌ Debes seleccionar un medio');
+    if (!editarId) return setError('⚠️ Debes seleccionar un medio.');
     const nombre = sanitizar(editarNombre);
-    if (nombre.length < 3) return setError('❌ Mínimo 3 caracteres');
+    if (nombre.length < 3) return setError('⚠️ El nombre debe tener al menos 3 caracteres.');
+
     setBusy(true);
     try {
       await putVar(`/medio-pago/${editarId}`, { nombre });
@@ -163,13 +215,9 @@ export default function MediosPago() {
       flash('✅ Medio de pago actualizado');
       await fetchMedios();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError(err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al actualizar medio de pago');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo actualizar el medio de pago.'));
     } finally {
       setBusy(false);
     }
@@ -181,19 +229,16 @@ export default function MediosPago() {
       setMostrarModal(false);
       return;
     }
+
     setBusy(true);
     try {
       await delVar(`/medio-pago/${medioSeleccionado.id}`);
       flash('✅ Medio de pago eliminado');
       await fetchMedios();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError(err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al eliminar');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo eliminar el medio de pago.'));
     } finally {
       setBusy(false);
       setMostrarModal(false);
@@ -211,8 +256,6 @@ export default function MediosPago() {
 
   return (
     <div className={`${fondo} min-h-screen px-4 pt-4 pb-16 font-realacademy`}>
-      {/* 🚫 Sin breadcrumb local; el layout /admin usa location.state */}
-
       <h2 className="text-2xl font-bold mb-6 text-center">Gestión de Medios de Pago</h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-6xl mx-auto">
@@ -223,7 +266,9 @@ export default function MediosPago() {
             <p className="opacity-60">Sin medios registrados.</p>
           ) : (
             <ul className="list-disc pl-5 space-y-1">
-              {medios.map((item) => (<li key={item.id}>{item.nombre ?? item.descripcion ?? `#${item.id}`}</li>))}
+              {medios.map((item) => (
+                <li key={item.id}>{item.nombre ?? item.descripcion ?? `#${item.id}`}</li>
+              ))}
             </ul>
           )}
         </div>
@@ -234,14 +279,19 @@ export default function MediosPago() {
           <input
             type="text"
             value={nuevoMedio}
-            onChange={(e) => { setNuevoMedio(e.target.value); setError(''); }}
+            onChange={(e) => {
+              setNuevoMedio(e.target.value);
+              setError('');
+            }}
             placeholder="Nombre medio"
             className={inputClase}
           />
           <button
             onClick={crearMedio}
             disabled={busy}
-            className={`mt-4 w-full py-2 rounded text-white ${busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
           >
             Guardar
           </button>
@@ -262,8 +312,13 @@ export default function MediosPago() {
             className={`${inputClase} mb-2`}
           >
             <option value="">Selecciona medio</option>
-            {medios.map(item => (<option key={item.id} value={item.id}>{item.nombre ?? item.descripcion}</option>))}
+            {medios.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.nombre ?? item.descripcion}
+              </option>
+            ))}
           </select>
+
           <input
             type="text"
             value={editarNombre}
@@ -271,10 +326,15 @@ export default function MediosPago() {
             placeholder="Nuevo nombre"
             className={inputClase}
           />
+
           <button
             onClick={actualizarMedio}
             disabled={busy || !editarId}
-            className={`mt-4 w-full py-2 rounded text-white ${busy || !editarId ? 'bg-gray-400 cursor-not-allowed' : 'bg-yellow-600 hover:bg-yellow-700'}`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              busy || !editarId
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-yellow-600 hover:bg-yellow-700'
+            }`}
           >
             Actualizar
           </button>
@@ -294,12 +354,21 @@ export default function MediosPago() {
             className={inputClase}
           >
             <option value="">Selecciona medio</option>
-            {medios.map(m => (<option key={m.id} value={m.id}>{m.nombre ?? m.descripcion}</option>))}
+            {medios.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.nombre ?? m.descripcion}
+              </option>
+            ))}
           </select>
+
           <button
             disabled={!medioSeleccionado || busy}
             onClick={() => setMostrarModal(true)}
-            className={`mt-4 w-full py-2 rounded text-white ${!medioSeleccionado || busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              !medioSeleccionado || busy
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-red-600 hover:bg-red-700'
+            }`}
           >
             Eliminar
           </button>
@@ -312,11 +381,7 @@ export default function MediosPago() {
         </p>
       )}
 
-      <Modal
-        visible={mostrarModal}
-        onConfirm={confirmarEliminacion}
-        onCancel={() => setMostrarModal(false)}
-      />
+      <Modal visible={mostrarModal} onConfirm={confirmarEliminacion} onCancel={() => setMostrarModal(false)} />
     </div>
   );
 }

@@ -6,7 +6,6 @@ import api, { getToken, clearToken } from '../../services/api';
 import IsLoading from '../../components/isLoading';
 import { jwtDecode } from 'jwt-decode';
 import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
-// 🆕 helper para mostrar RUT con dígito verificador (solo front)
 import { formatRutWithDV } from '../../services/rut';
 
 export default function ListarJugadores() {
@@ -66,13 +65,17 @@ export default function ListarJugadores() {
     return [];
   };
 
+  // ✅ acepta string o array + prueba variantes con / y sin /
   const tryGetList = async (paths) => {
+    const list = Array.isArray(paths) ? paths : [paths];
+
     const variants = [];
-    for (const p of paths) {
-      if (p.endsWith('/')) variants.push(p, p.slice(0, -1));
-      else variants.push(p, `${p}/`);
+    for (const p of list) {
+      const base = p.startsWith('/') ? p : `/${p}`;
+      variants.push(base, base.endsWith('/') ? base.slice(0, -1) : `${base}/`);
     }
     const uniq = [...new Set(variants)];
+
     for (const url of uniq) {
       try {
         const r = await api.get(url);
@@ -96,8 +99,38 @@ export default function ListarJugadores() {
       setError('');
 
       try {
+        /**
+         * ✅ CLAVE DEL REQUERIMIENTO:
+         * ListarJugadores = HISTORIAL COMPLETO (activos + inactivos).
+         *
+         * Si tu backend filtra por defecto SOLO activos, entonces:
+         * - usamos include_inactivos=1 (query)
+         * - y dejamos fallback a endpoints tipo /jugadores/todos (si existe)
+         */
         const jugadoresPaths =
-          rol === 2 ? ['/jugadores/staff', '/jugadores'] : ['/jugadores'];
+          rol === 2
+            ? [
+                // Staff - TODOS
+                '/jugadores/staff?include_inactivos=1',
+                '/jugadores/staff/todos',
+                '/jugadores/staff/all',
+                // General - TODOS
+                '/jugadores?include_inactivos=1',
+                '/jugadores/todos',
+                '/jugadores/all',
+                // Último fallback (podría venir filtrado por backend)
+                '/jugadores/staff',
+                '/jugadores',
+              ]
+            : [
+                // Admin - TODOS
+                '/jugadores?include_inactivos=1',
+                '/jugadores/todos',
+                '/jugadores/all',
+                // Fallback final
+                '/jugadores',
+              ];
+
         const rawJugadores = await tryGetList(jugadoresPaths);
 
         const [posList, catList, estList] = await Promise.all([
@@ -153,6 +186,9 @@ export default function ListarJugadores() {
 
         setJugadores(data);
         setIsLoading(false);
+
+        // Si no vino nada, avisamos (pero sin romper la UI)
+        if (!data.length) setError('⚠️ No se encontraron jugadores.');
       } catch (err) {
         const status = err?.response?.status;
         if (status === 401 || status === 403) {
@@ -190,19 +226,18 @@ export default function ListarJugadores() {
 
   // 🧩 Agrupar por categoría (para tarjetas)
   const grupos = useMemo(() => {
-    const m = new Map(); // categoriaNombre -> array
+    const m = new Map();
     for (const j of jugadores) {
       const cat = j?.categoria?.nombre || 'Sin categoría';
       if (!m.has(cat)) m.set(cat, []);
       m.get(cat).push(j);
     }
-    // orden alfabético por nombre de categoría
     return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b, 'es'));
   }, [jugadores]);
 
   if (isLoading) return <IsLoading />;
 
-  if (error) {
+  if (error && !jugadores.length) {
     return (
       <div className={`${fondoClase} min-h-screen flex justify-center items-center`}>
         <p className="text-red-500 text-lg">{error}</p>
@@ -213,6 +248,14 @@ export default function ListarJugadores() {
   return (
     <div className={`${fondoClase} px-2 sm:px-4 pt-4 pb-16 font-realacademy`}>
       <h2 className="text-2xl font-bold mb-6 text-center">Lista de Jugadores</h2>
+
+      {!!error && (
+        <div className="max-w-5xl mx-auto mb-4">
+          <div className={`${tarjetaClase}`}>
+            <p className="text-yellow-400 text-center">{error}</p>
+          </div>
+        </div>
+      )}
 
       {grupos.length === 0 ? (
         <div className={`${tarjetaClase}`}>
@@ -242,34 +285,19 @@ export default function ListarJugadores() {
                   <tbody>
                     {lista.map((jugador) => {
                       const rutCrudo = jugador.rut_jugador ?? jugador.id ?? null;
-                      const rutFormateado = rutCrudo
-                        ? formatRutWithDV(rutCrudo)
-                        : '-';
+                      const rutFormateado = rutCrudo ? formatRutWithDV(rutCrudo) : '-';
 
                       return (
                         <tr
                           key={jugador.rut_jugador ?? jugador.id}
                           className={`${filaHover} cursor-pointer`}
-                          onClick={() =>
-                            handleClick(jugador.rut_jugador, location.state?.breadcrumb)
-                          }
+                          onClick={() => handleClick(jugador.rut_jugador, location.state?.breadcrumb)}
                         >
-                          <td className="p-2 border text-center">
-                            {jugador.nombre_jugador}
-                          </td>
-                          {/* 🆕 RUT sólo decorativo: cuerpo + DV */}
-                          <td className="p-2 border text-center">
-                            {rutFormateado || rutCrudo || '-'}
-                          </td>
-                          <td className="p-2 border text-center">
-                            {jugador.edad ?? '-'}
-                          </td>
-                          <td className="p-2 border text-center">
-                            {jugador.telefono ?? '-'}
-                          </td>
-                          <td className="p-2 border text-center break-all">
-                            {jugador.email ?? '-'}
-                          </td>
+                          <td className="p-2 border text-center">{jugador.nombre_jugador}</td>
+                          <td className="p-2 border text-center">{rutFormateado || rutCrudo || '-'}</td>
+                          <td className="p-2 border text-center">{jugador.edad ?? '-'}</td>
+                          <td className="p-2 border text-center">{jugador.telefono ?? '-'}</td>
+                          <td className="p-2 border text-center break-all">{jugador.email ?? '-'}</td>
                           <td className="p-2 border text-center">
                             {jugador.posicion?.nombre ?? jugador.posicion_id ?? '-'}
                           </td>
@@ -282,6 +310,7 @@ export default function ListarJugadores() {
                   </tbody>
                 </table>
               </div>
+
             </div>
           ))}
         </div>

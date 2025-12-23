@@ -69,6 +69,8 @@ export default function FormJugador() {
     edad: '',
     telefono: '',
     email: '',
+    direccion: '',
+    comuna_id: '',
     posicion_id: '',
     categoria_id: '',
     estado_id: '',
@@ -92,6 +94,8 @@ export default function FormJugador() {
   const [establecimientos, setEstablecimientos] = useState([]);
   const [previsiones, setPrevisiones] = useState([]);
   const [sucursales, setSucursales] = useState([]);
+  const [comunas, setComunas] = useState([]);
+
 
   const [mensaje, setMensaje] = useState('');
   const [error, setError] = useState('');
@@ -133,14 +137,16 @@ export default function FormJugador() {
           _estados,
           _edu,
           _prev,
-          _suc
+          _suc,
+          _com
         ] = await Promise.all([
           tryGetList(['/posiciones', '/posicion']),
           tryGetList(['/categorias', '/categoria']),
           tryGetList(['/estado', '/estados']),
           tryGetList(['/establecimientos-educ']),
           tryGetList(['/prevision-medica']),
-          tryGetList(['/sucursales-real', '/sucursales'])
+          tryGetList(['/sucursales-real', '/sucursales']),
+          tryGetList(['/comunas'])
         ]);
 
         if (!alive) return;
@@ -165,9 +171,11 @@ export default function FormJugador() {
         setEstados(norm(_estados, ['id', 'estado_id']));
         setEstablecimientos(norm(_edu, ['id', 'establec_educ_id']));
         setPrevisiones(norm(_prev, ['id', 'prevision_medica_id']));
-        setSucursales(norm(_suc, ['id'])); // sucursales_real.id
+        setSucursales(norm(_suc, ['id']));
+        setComunas(norm(_com, ['id']));
 
-        const allEmpty = [_pos, _cat, _estados, _edu, _prev, _suc]
+
+        const allEmpty = [_pos, _cat, _estados, _edu, _prev, _suc, _com]
           .every(arr => !Array.isArray(arr) || arr.length === 0);
         if (allEmpty) setError('❌ No se pudieron cargar los datos de selección');
       } catch (err) {
@@ -195,8 +203,10 @@ export default function FormJugador() {
       establec_educ_id: (!prev.establec_educ_id && establecimientos.length === 1) ? String(establecimientos[0].id) : prev.establec_educ_id,
       prevision_medica_id: (!prev.prevision_medica_id && previsiones.length === 1) ? String(previsiones[0].id) : prev.prevision_medica_id,
       sucursal_id: (!prev.sucursal_id && sucursales.length === 1) ? String(sucursales[0].id) : prev.sucursal_id,
+      comuna_id: (!prev.comuna_id && comunas.length === 1) ? String(comunas[0].id) : prev.comuna_id,
+
     }));
-  }, [posiciones, categorias, estados, establecimientos, previsiones, sucursales]);
+  }, [posiciones, categorias, estados, establecimientos, previsiones, sucursales, comunas]);
 
   /* ───────── Helpers ───────── */
   const calcEdad = (yyyy_mm_dd) => {
@@ -262,6 +272,8 @@ export default function FormJugador() {
 
       // Limpieza previa
       const cleaned = trimStrings(formData);
+      const comunaId = cleaned.comuna_id ? Number(cleaned.comuna_id) : undefined;
+
 
       const payload = emptyToUndef({
         ...cleaned,
@@ -274,6 +286,9 @@ export default function FormJugador() {
         establec_educ_id: cleaned.establec_educ_id ? Number(cleaned.establec_educ_id) : undefined,
         prevision_medica_id: cleaned.prevision_medica_id ? Number(cleaned.prevision_medica_id) : undefined,
         sucursal_id: cleaned.sucursal_id ? Number(cleaned.sucursal_id) : undefined,
+        direccion: cleaned.direccion ? String(cleaned.direccion) : undefined,
+        comuna_id: Number.isFinite(comunaId) && comunaId > 0 ? comunaId : undefined,
+
         // fecha_nacimiento: llega como yyyy-mm-dd del input date → backend ya lo coerciona
       });
 
@@ -289,6 +304,8 @@ export default function FormJugador() {
         edad: '',
         telefono: '',
         email: '',
+        direccion: '',
+        comuna_id: '',
         posicion_id: '',
         categoria_id: '',
         estado_id: '',
@@ -359,33 +376,65 @@ export default function FormJugador() {
         )}
 
         <form onSubmit={enviarJugador} className="grid md:grid-cols-1 lg:grid-cols-1 gap-4 text-sm">
-          {/* Inputs simples */}
-          {[
-            ['nombre_jugador', 'Nombre', true],
-            ['rut_jugador', 'RUT (sin puntos ni guion ni dígito verificador)', true],
-            ['fecha_nacimiento', 'Fecha de Nacimiento', false, 'date'],
-            ['edad', 'Edad', false],
-            ['telefono', 'Teléfono (+56... o 9–11 dígitos)', false],
-            ['email', 'Correo', false, 'email'],
-            ['talla_polera', 'Talla Polera'],
-            ['talla_short', 'Talla Short'],
-            ['nombre_apoderado', 'Nombre Apoderado'],
-            ['rut_apoderado', 'RUT Apoderado (sin puntos ni guion ni dígito verificador)'],
-            ['telefono_apoderado', 'Teléfono Apoderado (+56...)'],
-            ['peso', 'Peso (kg)'],
-            ['estatura', 'Estatura (cm)']
-          ].map(([name, placeholder, req, type = 'text']) => (
-            <input
-              key={name}
-              name={name}
-              type={type}
-              value={formData[name]}
-              onChange={handleChange}
-              placeholder={placeholder}
-              required={!!req}
-              className={`${c.input} p-2 rounded`}
-            />
-          ))}
+          {/* Inputs simples + Comuna justo después de Dirección */}
+          {(() => {
+            const fields = [
+              ['nombre_jugador', 'Nombre', true],
+              ['rut_jugador', 'RUT (sin puntos ni guion ni dígito verificador)', true],
+              ['fecha_nacimiento', 'Fecha de Nacimiento', false, 'date'],
+              ['edad', 'Edad', false],
+              ['telefono', 'Teléfono (+56... o 9–11 dígitos)', false],
+              ['email', 'Correo', false, 'email'],
+              ['direccion', 'Dirección'],
+              ['talla_polera', 'Talla Polera'],
+              ['talla_short', 'Talla Short'],
+              ['nombre_apoderado', 'Nombre Apoderado'],
+              ['rut_apoderado', 'RUT Apoderado (sin puntos ni guion ni dígito verificador)'],
+              ['telefono_apoderado', 'Teléfono Apoderado (+56...)'],
+              ['peso', 'Peso (kg)'],
+              ['estatura', 'Estatura (cm)'],
+            ];
+
+            const idxDireccion = fields.findIndex(([name]) => name === 'direccion');
+            const before = idxDireccion >= 0 ? fields.slice(0, idxDireccion + 1) : fields;
+            const after = idxDireccion >= 0 ? fields.slice(idxDireccion + 1) : [];
+
+            const renderInput = ([name, placeholder, req, type = 'text']) => (
+              <input
+                key={name}
+                name={name}
+                type={type}
+                value={formData[name] ?? ''}
+                onChange={handleChange}
+                placeholder={placeholder}
+                required={!!req}
+                className={`${c.input} p-2 rounded`}
+              />
+            );
+
+            return (
+              <>
+                {before.map(renderInput)}
+
+                {/* ✅ Comuna inmediatamente después de Dirección */}
+                <select
+                  name="comuna_id"
+                  value={formData.comuna_id ?? ''}
+                  onChange={handleChange}
+                  className={`${c.input} p-2 rounded`}
+                >
+                  <option value="">Comuna</option>
+                  {comunas.map((co) => (
+                    <option key={co.id} value={co.id}>
+                      {co.nombre}
+                    </option>
+                  ))}
+                </select>
+
+                {after.map(renderInput)}
+              </>
+            );
+          })()}
 
           {/* Selects */}
           <select
@@ -481,6 +530,7 @@ export default function FormJugador() {
             {isSubmitting ? 'Guardando…' : 'Guardar'}
           </button>
         </form>
+
 
         {mensaje && <p className="text-green-500 mt-4 text-center">{mensaje}</p>}
       </div>

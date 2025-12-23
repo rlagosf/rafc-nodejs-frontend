@@ -44,7 +44,6 @@ export default function Sucursales() {
 
   useMobileAutoScrollTop();
 
-
   // 🔐 Auth admin=1 con getToken/clearToken
   useEffect(() => {
     try {
@@ -72,7 +71,10 @@ export default function Sucursales() {
   const flash = (okMsg, errMsg) => {
     if (okMsg) setMensaje(okMsg);
     if (errMsg) setError(errMsg);
-    setTimeout(() => { setMensaje(''); setError(''); }, 2500);
+    setTimeout(() => {
+      setMensaje('');
+      setError('');
+    }, 2500);
   };
 
   const toArray = (resp) => {
@@ -85,22 +87,67 @@ export default function Sucursales() {
     return [];
   };
 
-  // Variantes de endpoint con/sin slash final
+  // ✅ error normalizado por api.js (NO depender de err.response)
+  const getErrStatus = (err) => err?.status ?? err?.response?.status ?? 0;
+  const getErrData = (err) => err?.data ?? err?.response?.data ?? null;
+
+  const handleAuth = () => {
+    clearToken();
+    navigate('/login', { replace: true });
+  };
+
+  // ✅ Mensajes específicos (FK/DUP aunque vengan como 500)
+  const prettyError = (err, fallback) => {
+    const st = getErrStatus(err);
+    const data = getErrData(err);
+    const backendMsg = data?.message || data?.detail || data?.error || err?.message || null;
+
+    if (st === 401 || st === 403) return '🔒 Sesión expirada o sin permisos. Vuelve a iniciar sesión.';
+    if (st === 400) return backendMsg || '⚠️ Datos inválidos. Revisa el nombre.';
+    if (st === 404) return backendMsg || '⚠️ No encontrado (puede que ya haya sido eliminado).';
+
+    if (st === 409) {
+      if (data?.errno === 1451 || data?.code === 'ER_ROW_IS_REFERENCED_2') {
+        return '⚠️ No se puede eliminar: la sucursal está siendo usada por registros asociados.';
+      }
+      if (data?.errno === 1062 || data?.code === 'ER_DUP_ENTRY') {
+        return '⚠️ Ya existe una sucursal con ese nombre.';
+      }
+      return backendMsg || '⚠️ Conflicto: no se pudo completar la acción.';
+    }
+
+    // por si backend manda 500 pero con errno/code
+    if (data?.errno === 1451 || data?.code === 'ER_ROW_IS_REFERENCED_2') {
+      return '⚠️ No se puede eliminar: la sucursal está siendo usada por registros asociados.';
+    }
+    if (data?.errno === 1062 || data?.code === 'ER_DUP_ENTRY') {
+      return '⚠️ Ya existe una sucursal con ese nombre.';
+    }
+
+    return backendMsg || fallback || '❌ Error inesperado.';
+  };
+
+  // ✅ Variantes endpoint con/sin slash final (guardando el error real)
   const withVariants = (fn) => async (base, ...args) => {
     const urls = base.endsWith('/') ? [base, base.slice(0, -1)] : [base, `${base}/`];
+    let lastErr = null;
+
     for (const u of urls) {
-      try { return await fn(u, ...args); } catch (e) {
-        const st = e?.response?.status;
+      try {
+        return await fn(u, ...args);
+      } catch (e) {
+        lastErr = e;
+        const st = getErrStatus(e);
         if (st === 401 || st === 403) throw e;
       }
     }
-    throw new Error('ENDPOINT_VARIANTS_FAILED');
+    throw lastErr || new Error('ENDPOINT_VARIANTS_FAILED');
   };
 
-  const getVar  = withVariants((u, cfg) => api.get(u, cfg));
+  const getVar = withVariants((u, cfg) => api.get(u, cfg));
   const postVar = withVariants((u, payload, cfg) => api.post(u, payload, cfg));
-  const putVar  = withVariants((u, payload, cfg) => api.put(u, payload, cfg));
-  const delVar  = withVariants((u, cfg) => api.delete(u, cfg));
+  const putVar = withVariants((u, payload, cfg) => api.put(u, payload, cfg));
+  const delVar = withVariants((u, cfg) => api.delete(u, cfg));
 
   // ───────── Fetch ─────────
   const fetchSucursales = async () => {
@@ -108,13 +155,9 @@ export default function Sucursales() {
       const res = await getVar('/sucursales-real');
       setSucursales(toArray(res));
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError('❌ Error al obtener sucursales');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ Error al obtener sucursales'));
     }
   };
 
@@ -124,13 +167,17 @@ export default function Sucursales() {
       await fetchSucursales();
       if (!alive) return;
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ───────── Crear ─────────
   const crear = async () => {
     const nombre = sanitizar(nuevo);
-    if (nombre.length < 3) return setError('❌ Nombre muy corto');
+    if (nombre.length < 3) return setError('⚠️ El nombre debe tener al menos 3 caracteres.');
+
     setBusy(true);
     try {
       await postVar('/sucursales-real', { nombre });
@@ -138,13 +185,9 @@ export default function Sucursales() {
       flash('✅ Sucursal creada');
       await fetchSucursales();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError(err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al crear');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo crear la sucursal.'));
     } finally {
       setBusy(false);
     }
@@ -152,9 +195,10 @@ export default function Sucursales() {
 
   // ───────── Actualizar ─────────
   const actualizar = async () => {
-    if (!editarId) return setError('❌ Debes seleccionar un registro');
+    if (!editarId) return setError('⚠️ Debes seleccionar una sucursal.');
     const nombre = sanitizar(editarNombre);
-    if (nombre.length < 3) return setError('❌ Nombre muy corto');
+    if (nombre.length < 3) return setError('⚠️ El nombre debe tener al menos 3 caracteres.');
+
     setBusy(true);
     try {
       await putVar(`/sucursales-real/${editarId}`, { nombre });
@@ -163,13 +207,9 @@ export default function Sucursales() {
       flash('✅ Actualizado');
       await fetchSucursales();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError(err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al actualizar');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo actualizar la sucursal.'));
     } finally {
       setBusy(false);
     }
@@ -181,19 +221,16 @@ export default function Sucursales() {
       setMostrarModal(false);
       return;
     }
+
     setBusy(true);
     try {
       await delVar(`/sucursales-real/${seleccionado.id}`);
       flash('✅ Eliminado');
       await fetchSucursales();
     } catch (err) {
-      const st = err?.response?.status;
-      if (st === 401 || st === 403) {
-        clearToken();
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError(err?.response?.data?.detail || err?.response?.data?.message || '❌ Error al eliminar');
+      const st = getErrStatus(err);
+      if (st === 401 || st === 403) return handleAuth();
+      setError(prettyError(err, '❌ No se pudo eliminar la sucursal.'));
     } finally {
       setBusy(false);
       setMostrarModal(false);
@@ -211,8 +248,6 @@ export default function Sucursales() {
 
   return (
     <div className={`${fondo} min-h-screen px-4 pt-4 pb-16 font-realacademy`}>
-      {/* 🚫 Sin breadcrumb local; el layout /admin usa location.state */}
-
       <h2 className="text-2xl font-bold mb-6 text-center">Sucursales</h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-6xl mx-auto">
@@ -223,7 +258,9 @@ export default function Sucursales() {
             <p className="opacity-60">Sin registros.</p>
           ) : (
             <ul className="list-disc pl-5 space-y-1">
-              {sucursales.map((e) => (<li key={e.id}>{e.nombre ?? `#${e.id}`}</li>))}
+              {sucursales.map((e) => (
+                <li key={e.id}>{e.nombre ?? `#${e.id}`}</li>
+              ))}
             </ul>
           )}
         </div>
@@ -233,14 +270,19 @@ export default function Sucursales() {
           <h3 className="text-lg font-bold mb-4">➕ Crear</h3>
           <input
             value={nuevo}
-            onChange={(e) => { setNuevo(e.target.value); setError(''); }}
+            onChange={(e) => {
+              setNuevo(e.target.value);
+              setError('');
+            }}
             placeholder="Nombre"
             className={inputClase}
           />
           <button
             onClick={crear}
             disabled={busy}
-            className={`mt-4 w-full py-2 rounded text-white ${busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
           >
             Guardar
           </button>
@@ -254,24 +296,37 @@ export default function Sucursales() {
             onChange={(e) => {
               const id = parseInt(e.target.value, 10);
               setEditarId(id || null);
-              setEditarNombre(sucursales.find(p => Number(p.id) === id)?.nombre || '');
+              setEditarNombre(sucursales.find((p) => Number(p.id) === id)?.nombre || '');
               setError('');
             }}
             className={`${inputClase} mb-2`}
           >
             <option value="">Selecciona</option>
-            {sucursales.map((p) => (<option key={p.id} value={p.id}>{p.nombre}</option>))}
+            {sucursales.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nombre}
+              </option>
+            ))}
           </select>
+
           <input
             value={editarNombre}
-            onChange={(e) => setEditarNombre(e.target.value)}
+            onChange={(e) => {
+              setEditarNombre(e.target.value);
+              setError('');
+            }}
             placeholder="Nuevo nombre"
             className={inputClase}
           />
+
           <button
             onClick={actualizar}
             disabled={busy || !editarId}
-            className={`mt-4 w-full py-2 rounded text-white ${busy || !editarId ? 'bg-gray-400 cursor-not-allowed' : 'bg-yellow-600 hover:bg-yellow-700'}`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              busy || !editarId
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-yellow-600 hover:bg-yellow-700'
+            }`}
           >
             Actualizar
           </button>
@@ -284,19 +339,28 @@ export default function Sucursales() {
             value={seleccionado?.id || ''}
             onChange={(e) => {
               const id = parseInt(e.target.value, 10);
-              const sel = sucursales.find(p => Number(p.id) === id);
+              const sel = sucursales.find((p) => Number(p.id) === id);
               setSeleccionado(sel || null);
               setError('');
             }}
             className={inputClase}
           >
             <option value="">Selecciona</option>
-            {sucursales.map((p) => (<option key={p.id} value={p.id}>{p.nombre}</option>))}
+            {sucursales.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nombre}
+              </option>
+            ))}
           </select>
+
           <button
             disabled={!seleccionado || busy}
             onClick={() => setMostrarModal(true)}
-            className={`mt-4 w-full py-2 rounded text-white ${!seleccionado || busy ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
+            className={`mt-4 w-full py-2 rounded text-white ${
+              !seleccionado || busy
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-red-600 hover:bg-red-700'
+            }`}
           >
             Eliminar
           </button>
@@ -309,11 +373,7 @@ export default function Sucursales() {
         </p>
       )}
 
-      <Modal
-        visible={mostrarModal}
-        onConfirm={eliminar}
-        onCancel={() => setMostrarModal(false)}
-      />
+      <Modal visible={mostrarModal} onConfirm={eliminar} onCancel={() => setMostrarModal(false)} />
     </div>
   );
 }
