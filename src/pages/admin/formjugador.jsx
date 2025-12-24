@@ -7,6 +7,12 @@ import IsLoading from '../../components/isLoading';
 import { jwtDecode } from 'jwt-decode';
 import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
 
+// ✅ Forma B (frontend genera contrato PDF)
+import { CONTRATO_TEMPLATE } from '../../services/contratoTemplate';
+import { fillContratoTemplate } from '../../services/contratoFill';
+import { buildContratoPdfBlob } from '../../services/contratoPdf';
+import { formatRutWithDV } from '../../services/rut';
+
 /* ───────── Helpers robustos ───────── */
 const asList = (raw) => {
   if (!raw) return [];
@@ -57,6 +63,18 @@ const emptyToUndef = (obj) => {
   return out;
 };
 
+// ✅ fecha larga en español (sin librerías)
+const fechaEsLarga = (d = new Date()) => {
+  const meses = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+  ];
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = meses[d.getMonth()];
+  const yyyy = d.getFullYear();
+  return `${dd} de ${mm} de ${yyyy}`;
+};
+
 export default function FormJugador() {
   const { darkMode } = useTheme();
   const navigate = useNavigate();
@@ -96,11 +114,14 @@ export default function FormJugador() {
   const [sucursales, setSucursales] = useState([]);
   const [comunas, setComunas] = useState([]);
 
-
   const [mensaje, setMensaje] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);        // carga de catálogos
   const [isSubmitting, setIsSubmitting] = useState(false); // envío de formulario
+
+  // 🔸 Preview contrato
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState('');
 
   /* ───────── Validación de token ───────── */
   useEffect(() => {
@@ -122,7 +143,6 @@ export default function FormJugador() {
   }, [navigate]);
 
   useMobileAutoScrollTop();
-
 
   /* ───────── Cargar catálogos (resistente) ───────── */
   useEffect(() => {
@@ -174,7 +194,6 @@ export default function FormJugador() {
         setSucursales(norm(_suc, ['id']));
         setComunas(norm(_com, ['id']));
 
-
         const allEmpty = [_pos, _cat, _estados, _edu, _prev, _suc, _com]
           .every(arr => !Array.isArray(arr) || arr.length === 0);
         if (allEmpty) setError('❌ No se pudieron cargar los datos de selección');
@@ -204,7 +223,6 @@ export default function FormJugador() {
       prevision_medica_id: (!prev.prevision_medica_id && previsiones.length === 1) ? String(previsiones[0].id) : prev.prevision_medica_id,
       sucursal_id: (!prev.sucursal_id && sucursales.length === 1) ? String(sucursales[0].id) : prev.sucursal_id,
       comuna_id: (!prev.comuna_id && comunas.length === 1) ? String(comunas[0].id) : prev.comuna_id,
-
     }));
   }, [posiciones, categorias, estados, establecimientos, previsiones, sucursales, comunas]);
 
@@ -242,7 +260,78 @@ export default function FormJugador() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  /* ───────── Enviar ───────── */
+  /* ───────── Preview contrato (Forma B: frontend PDF) ───────── */
+  const handlePreviewContrato = async () => {
+    setPreviewError('');
+
+    const required = ['nombre_apoderado', 'rut_apoderado', 'nombre_jugador', 'rut_jugador'];
+    for (const k of required) {
+      if (!String(formData[k] ?? '').trim()) {
+        setPreviewError('Faltan campos obligatorios para previsualizar el contrato.');
+        return;
+      }
+    }
+
+    const rutApoDigits = String(formData.rut_apoderado).replace(/\D/g, '');
+    const rutJugDigits = String(formData.rut_jugador).replace(/\D/g, '');
+
+    if (!/^\d{7,8}$/.test(rutApoDigits)) {
+      setPreviewError('El RUT del apoderado debe ser de 7 u 8 dígitos (sin DV).');
+      return;
+    }
+    if (!/^\d{7,8}$/.test(rutJugDigits)) {
+      setPreviewError('El RUT del jugador debe ser de 7 u 8 dígitos (sin DV).');
+      return;
+    }
+
+    const comunaNombre =
+      comunas.find((c) => String(c.id) === String(formData.comuna_id))?.nombre || '';
+
+    // placeholders del contrato (se rellenan con string)
+    const data = {
+      fecha_contrato: fechaEsLarga(new Date()),
+      nombre_apoderado: String(formData.nombre_apoderado).trim(),
+      rut_apoderado: formatRutWithDV(rutApoDigits),
+      nombre_jugador: String(formData.nombre_jugador).trim(),
+      rut_jugador: formatRutWithDV(rutJugDigits),
+      fecha_nacimiento: formData.fecha_nacimiento ? String(formData.fecha_nacimiento) : '',
+      // el contrato usa <<dirección>> (con tilde); el fill soporta ambos
+      'dirección': formData.direccion ? String(formData.direccion).trim() : '',
+      comuna_id: comunaNombre || '',
+    };
+
+    try {
+      setPreviewLoading(true);
+
+      const textoFinal = fillContratoTemplate(CONTRATO_TEMPLATE, data);
+
+      const blob = await buildContratoPdfBlob({
+        titulo: 'CONTRATO DE PRESTACIÓN DE SERVICIOS',
+        subtitulo: `${data.nombre_jugador} • ${data.rut_jugador}`,
+        texto: textoFinal,
+      });
+
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!win) {
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      console.error(e);
+      setPreviewError('No se pudo generar el contrato en PDF.');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  /* ───────── Enviar jugador ───────── */
   const enviarJugador = async (e) => {
     e.preventDefault();
     setMensaje('');
@@ -274,7 +363,6 @@ export default function FormJugador() {
       const cleaned = trimStrings(formData);
       const comunaId = cleaned.comuna_id ? Number(cleaned.comuna_id) : undefined;
 
-
       const payload = emptyToUndef({
         ...cleaned,
         rut_jugador: cleaned.rut_jugador ? Number(cleaned.rut_jugador) : undefined,
@@ -288,7 +376,6 @@ export default function FormJugador() {
         sucursal_id: cleaned.sucursal_id ? Number(cleaned.sucursal_id) : undefined,
         direccion: cleaned.direccion ? String(cleaned.direccion) : undefined,
         comuna_id: Number.isFinite(comunaId) && comunaId > 0 ? comunaId : undefined,
-
         // fecha_nacimiento: llega como yyyy-mm-dd del input date → backend ya lo coerciona
       });
 
@@ -522,15 +609,31 @@ export default function FormJugador() {
             className={`${c.input} col-span-full p-2 rounded h-24 resize-none`}
           />
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className={`col-span-full ${isSubmitting ? 'opacity-60 cursor-not-allowed' : ''} bg-blue-600 text-white py-2 rounded hover:bg-blue-700`}
-          >
-            {isSubmitting ? 'Guardando…' : 'Guardar'}
-          </button>
-        </form>
+          {previewError && (
+            <div className="col-span-full mb-2 p-3 rounded border border-red-400 text-red-600 bg-red-50">
+              {previewError}
+            </div>
+          )}
 
+          <div className="col-span-full flex gap-3">
+            <button
+              type="button"
+              onClick={handlePreviewContrato}
+              disabled={previewLoading}
+              className={`${previewLoading ? 'opacity-60 cursor-not-allowed' : ''} bg-fuchsia-600 text-white py-2 px-4 rounded hover:bg-fuchsia-700`}
+            >
+              {previewLoading ? 'Generando contrato…' : 'Previsualizar contrato'}
+            </button>
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className={`${isSubmitting ? 'opacity-60 cursor-not-allowed' : ''} bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700`}
+            >
+              {isSubmitting ? 'Guardando…' : 'Guardar'}
+            </button>
+          </div>
+        </form>
 
         {mensaje && <p className="text-green-500 mt-4 text-center">{mensaje}</p>}
       </div>
