@@ -3,6 +3,10 @@ import { lazy } from "react";
 import ProtectedRoute from "../components/protectedRoute";
 import useInactividadLogout from "../hooks/useInactividadLogout";
 
+// Layout público (no lazy, componentes chicos)
+import Navbar from "../components/navbar";
+import Footer from "../components/footer";
+
 // Públicos (lazy)
 const Landing = lazy(() => import("../pages/landing"));
 const Contacto = lazy(() => import("../pages/contacto"));
@@ -10,11 +14,13 @@ const Servicios = lazy(() => import("../pages/servicios"));
 const Ubicacion = lazy(() => import("../pages/ubicacion"));
 const Nosotros = lazy(() => import("../pages/nosotros"));
 const Galeria = lazy(() => import("../pages/galeria"));
-const Login = lazy(() => import("../pages/admin/login"));
 
-// Layout público (no lazy, componentes chicos)
-import Navbar from "../components/navbar";
-import Footer from "../components/footer";
+const Login = lazy(() => import("../pages/admin/login"));
+const LoginApoderado = lazy(() => import("../pages/admin/loginApoderado"));
+
+// Apoderados (lazy)
+const PortalApoderadoHome = lazy(() => import("../pages/apoderado/portalHome"));
+const CambiarClaveApoderado = lazy(() => import("../pages/apoderado/cambiarClave"));
 
 // Admin (lazy)
 const DashboardLayout = lazy(() => import("../pages/admin/dashboard"));
@@ -26,9 +32,13 @@ const Agenda = lazy(() => import("../pages/admin/agenda"));
 
 const ListarPagos = lazy(() => import("../pages/admin/listarPagos"));
 const Pagos = lazy(() => import("../pages/admin/pagos"));
-const JugadoresPendientes = lazy(() => import("../pages/admin/modulo-financiero/jugadoresPendientes"));
+const JugadoresPendientes = lazy(() =>
+  import("../pages/admin/modulo-financiero/jugadoresPendientes")
+);
 const PowerbiFinanzas = lazy(() => import("../pages/admin/powerbiFinanzas"));
-const PagosCentralizados = lazy(() => import("../pages/admin/modulo-financiero/pagosCentralizados"));
+const PagosCentralizados = lazy(() =>
+  import("../pages/admin/modulo-financiero/pagosCentralizados")
+);
 const EstadosCuenta = lazy(() => import("../pages/admin/estadosCuenta"));
 
 const Configuracion = lazy(() => import("../pages/admin/configuracion"));
@@ -36,26 +46,48 @@ const Categorias = lazy(() => import("../pages/admin/configuracion/categorias"))
 const MediosPago = lazy(() => import("../pages/admin/configuracion/mediospago"));
 const TiposPago = lazy(() => import("../pages/admin/configuracion/tipospago"));
 const Roles = lazy(() => import("../pages/admin/configuracion/roles"));
-const EstadoJugadores = lazy(() => import("../pages/admin/configuracion/estadojugadores"));
+const EstadoJugadores = lazy(() =>
+  import("../pages/admin/configuracion/estadojugadores")
+);
 const Posiciones = lazy(() => import("../pages/admin/configuracion/posiciones"));
-const EstablecimientosEducacionales = lazy(() => import("../pages/admin/configuracion/estableceduc"));
-const PrevisionMedica = lazy(() => import("../pages/admin/configuracion/previsionmedica"));
+const EstablecimientosEducacionales = lazy(() =>
+  import("../pages/admin/configuracion/estableceduc")
+);
+const PrevisionMedica = lazy(() =>
+  import("../pages/admin/configuracion/previsionmedica")
+);
 const Sucursales = lazy(() => import("../pages/admin/configuracion/sucursales"));
 
 const CrearConvocatoria = lazy(() => import("../pages/admin/crearConvocatoria"));
 const DetalleJugador = lazy(() => import("../pages/admin/detalleJugador"));
-const VerConvocacionHistorica = lazy(() => import("../pages/admin/verConvocatoriaHistorica"));
-const RegistrarEstadisticas = lazy(() => import("../pages/admin/registraEstadistica"));
-const DetalleEstadistica = lazy(() => import("../pages/admin/detalleEstadistica"));
+const VerConvocacionHistorica = lazy(() =>
+  import("../pages/admin/verConvocatoriaHistorica")
+);
+const RegistrarEstadisticas = lazy(() =>
+  import("../pages/admin/registraEstadistica")
+);
+const DetalleEstadistica = lazy(() =>
+  import("../pages/admin/detalleEstadistica")
+);
 
 function Home() {
   return (
     <>
-      <section id="inicio" className="scroll-mt-16"><Landing /></section>
-      <section id="nosotros" className="scroll-mt-16"><Nosotros /></section>
-      <section id="servicios" className="scroll-mt-16"><Servicios /></section>
-      <section id="ubicacion" className="scroll-mt-16"><Ubicacion /></section>
-      <section id="contacto" className="scroll-mt-16"><Contacto /></section>
+      <section id="inicio" className="scroll-mt-16">
+        <Landing />
+      </section>
+      <section id="nosotros" className="scroll-mt-16">
+        <Nosotros />
+      </section>
+      <section id="servicios" className="scroll-mt-16">
+        <Servicios />
+      </section>
+      <section id="ubicacion" className="scroll-mt-16">
+        <Ubicacion />
+      </section>
+      <section id="contacto" className="scroll-mt-16">
+        <Contacto />
+      </section>
     </>
   );
 }
@@ -64,7 +96,9 @@ function PublicShell() {
   return (
     <div className="scroll-smooth w-full min-h-screen bg-gradient-to-br from-[#1d0b0b] via-[#1d0b0b] to-[#e82d89] text-white font-sans">
       <Navbar />
-      <main><Home /></main>
+      <main>
+        <Home />
+      </main>
       <Footer />
     </div>
   );
@@ -83,13 +117,14 @@ export const routes = [
   // Público
   { path: "/", element: <PublicShell /> },
   { path: "/login", element: <Login /> },
+  { path: "/login-apoderado", element: <LoginApoderado /> },
   { path: "/galeria", element: <Galeria /> },
 
   // Admin protegido (mismo comportamiento que antes)
   {
     path: "/admin",
     element: (
-      <ProtectedRoute>
+      <ProtectedRoute roleIn={[1, 2]} mode="admin">
         <PrivateApp>
           <DashboardLayout />
         </PrivateApp>
@@ -116,7 +151,10 @@ export const routes = [
       { path: "configuracion/roles", element: <Roles /> },
       { path: "configuracion/estados", element: <EstadoJugadores /> },
       { path: "configuracion/posiciones", element: <Posiciones /> },
-      { path: "configuracion/establecimientos-educacionales", element: <EstablecimientosEducacionales /> },
+      {
+        path: "configuracion/establecimientos-educacionales",
+        element: <EstablecimientosEducacionales />,
+      },
       { path: "configuracion/prevision-medica", element: <PrevisionMedica /> },
       { path: "configuracion/sucursales", element: <Sucursales /> },
 
@@ -125,6 +163,25 @@ export const routes = [
       { path: "ver-convocaciones-historicas", element: <VerConvocacionHistorica /> },
       { path: "registrar-estadisticas", element: <RegistrarEstadisticas /> },
       { path: "detalle-estadistica/:rut", element: <DetalleEstadistica /> },
+    ],
+  },
+
+  // ✅ Portal Apoderado protegido
+  {
+    path: "/portal-apoderado",
+    element: (
+      <ProtectedRoute mode="apoderado">
+        <PrivateApp>
+          <PortalApoderadoHome />
+        </PrivateApp>
+      </ProtectedRoute>
+    ),
+    children: [
+      { path: "cambiar-clave", element: <CambiarClaveApoderado /> },
+      // Luego agregamos:
+      // { path: "mis-jugadores", element: <MisJugadores /> },
+      // { path: "jugadores/:rut/pagos", element: <PagosJugador /> },
+      // { path: "jugadores/:rut/estadisticas", element: <EstadisticasJugador /> },
     ],
   },
 ];

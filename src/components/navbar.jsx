@@ -5,17 +5,23 @@ import logoRAFC from '../statics/logos/logo-sin-fondo.png';
 
 export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isLoginOpen, setIsLoginOpen] = useState(false); // 👈 dropdown login (admin/apoderado)
   const [scrolledPastHero, setScrolledPastHero] = useState(false);
   const [tocaDifuminado, setTocaDifuminado] = useState(false);
-  const [showNavbar, setShowNavbar] = useState(true); // 👈 nuevo estado para ocultar/mostrar navbar
+  const [showNavbar, setShowNavbar] = useState(true); // 👈 ocultar/mostrar navbar
 
-  const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
+  const toggleMenu = () => {
+    setIsMenuOpen(!isMenuOpen);
+    setIsLoginOpen(false); // evita dropdown colgado
+  };
+
+  const toggleLogin = () => setIsLoginOpen((v) => !v);
 
   const navLinks = [
     { name: 'Inicio', target: 'inicio' },
     { name: 'Nosotros', target: 'nosotros' },
     { name: 'Servicios', target: 'servicios' },
-    { name: 'Ubicacion', target: 'ubicacion'},
+    { name: 'Ubicacion', target: 'ubicacion' },
     { name: 'Contacto', target: 'contacto' },
   ];
 
@@ -42,7 +48,7 @@ export default function Navbar() {
     };
   }, []);
 
-  // 👇 lógica para ocultar navbar en móviles al hacer scroll hacia abajo
+  // 👇 ocultar navbar en móviles al hacer scroll hacia abajo
   useEffect(() => {
     let lastScrollY = window.scrollY;
 
@@ -54,11 +60,11 @@ export default function Navbar() {
       }
 
       if (window.scrollY <= 10) {
-        setShowNavbar(true); // mostrar al tope
+        setShowNavbar(true);
       } else if (window.scrollY > lastScrollY) {
-        setShowNavbar(false); // ocultar al bajar
+        setShowNavbar(false);
       } else {
-        setShowNavbar(true); // mostrar al subir
+        setShowNavbar(true);
       }
 
       lastScrollY = window.scrollY;
@@ -68,13 +74,21 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // 🔷 Fondo para navbar superior (pantallas grandes)
-  const topBarBackground =
-    scrolledPastHero
-      ? 'bg-black/80 backdrop-blur-md'
-      : 'bg-transparent backdrop-blur-md';
+  // 👇 cerrar dropdown login al click fuera
+  useEffect(() => {
+    const onClick = (e) => {
+      if (!e.target.closest?.('#login-dropdown')) setIsLoginOpen(false);
+    };
+    document.addEventListener('click', onClick);
+    return () => document.removeEventListener('click', onClick);
+  }, []);
 
-  // 🔷 Fondo para menú hamburguesa abierto
+  // 🔷 Fondo navbar superior (pantallas grandes)
+  const topBarBackground = scrolledPastHero
+    ? 'bg-black/80 backdrop-blur-md'
+    : 'bg-transparent backdrop-blur-md';
+
+  // 🔷 Fondo menú hamburguesa abierto
   const menuMobileBackground =
     isMenuOpen && tocaDifuminado
       ? 'bg-[#1d0b0b] backdrop-blur-md'
@@ -86,9 +100,9 @@ export default function Navbar() {
         }`}
     >
       {/* 🔸 Barra superior completa */}
-      <div className={`w-full px-8 lg:px-40 py-4 flex justify-between items-center transition-all duration-500 ease-in-out ${topBarBackground}`}>
-
-
+      <div
+        className={`w-full px-8 lg:px-40 py-4 flex justify-between items-center transition-all duration-500 ease-in-out ${topBarBackground}`}
+      >
         {/* 🔹 Logo + redes sociales */}
         <div className="flex items-center gap-6">
           <ScrollLink
@@ -97,12 +111,12 @@ export default function Navbar() {
             duration={500}
             offset={-64}
             className="cursor-pointer"
+            onClick={() => {
+              setIsMenuOpen(false);
+              setIsLoginOpen(false);
+            }}
           >
-            <img
-              src={logoRAFC}
-              alt="Real Academy FC"
-              className="h-12 w-auto"
-            />
+            <img src={logoRAFC} alt="Real Academy FC" className="h-12 w-auto" />
           </ScrollLink>
 
           <div className="hidden lg:flex space-x-5 text-xl">
@@ -152,18 +166,43 @@ export default function Navbar() {
                 offset={-64}
                 spy={true}
                 className="cursor-pointer hover:text-[#e82d89] transition"
+                onClick={() => setIsLoginOpen(false)}
               >
                 {name}
               </ScrollLink>
             </li>
           ))}
-          <li>
-            <RouterLink
-              to="/login"
+
+          {/* ✅ Dropdown login */}
+          <li className="relative" id="login-dropdown">
+            <button
+              type="button"
+              onClick={toggleLogin}
               className="hover:text-[#e82d89] transition"
             >
               Iniciar sesión
-            </RouterLink>
+            </button>
+
+
+            {isLoginOpen && (
+              <div className="absolute right-0 mt-3 w-56 rounded-xl bg-black/90 backdrop-blur-md border border-white/10 shadow-xl overflow-hidden">
+                <RouterLink
+                  to="/login"
+                  className="block px-4 py-3 text-sm hover:bg-white/10 transition"
+                  onClick={() => setIsLoginOpen(false)}
+                >
+                  🔐 Panel Administración
+                </RouterLink>
+
+                <RouterLink
+                  to="/login-apoderado"
+                  className="block px-4 py-3 text-sm hover:bg-white/10 transition"
+                  onClick={() => setIsLoginOpen(false)}
+                >
+                  👨‍👩‍👦 Portal Apoderados
+                </RouterLink>
+              </div>
+            )}
           </li>
         </ul>
 
@@ -217,13 +256,43 @@ export default function Navbar() {
               {name}
             </ScrollLink>
           ))}
-          <RouterLink
-            to="/login"
-            className="block hover:text-[#e82d89]"
-            onClick={toggleMenu}
-          >
-            Iniciar Sesión
-          </RouterLink>
+
+          {/* ✅ Login móvil con 2 opciones */}
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={() => setIsLoginOpen((v) => !v)}
+              className="w-full text-left hover:text-[#e82d89]"
+            >
+              Iniciar Sesión
+            </button>
+
+            {isLoginOpen && (
+              <div className="space-y-2 pl-3 border-l border-white/20">
+                <RouterLink
+                  to="/login"
+                  className="block hover:text-[#e82d89]"
+                  onClick={() => {
+                    setIsLoginOpen(false);
+                    toggleMenu();
+                  }}
+                >
+                  🔐 Panel Administración
+                </RouterLink>
+
+                <RouterLink
+                  to="/login-apoderado"
+                  className="block hover:text-[#e82d89]"
+                  onClick={() => {
+                    setIsLoginOpen(false);
+                    toggleMenu();
+                  }}
+                >
+                  👨‍👩‍👦 Portal Apoderados
+                </RouterLink>
+              </div>
+            )}
+          </div>
 
           <div className="flex justify-center pt-4 space-x-5 text-xl border-t border-white/20 mt-4">
             <a

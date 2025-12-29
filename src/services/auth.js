@@ -12,8 +12,19 @@ export async function login(nombre_usuario, password) {
   }
 }
 
+// ✅ LOGIN APODERADO (MISMO CONTRATO)
+export async function loginApoderado(rut, password) {
+  try {
+    const { data } = await api.post("/auth-apoderado/login", { rut, password });
+    if (data?.rafc_token) setToken(data.rafc_token);
+    return data;
+  } catch (err) {
+    console.error("[RAFC] Error en loginApoderado:", err?.message || err);
+    throw err;
+  }
+}
+
 export function logout() {
-  // ✅ logout local inmediato, sin esperar nada
   clearToken();
   try {
     localStorage.removeItem("user_info");
