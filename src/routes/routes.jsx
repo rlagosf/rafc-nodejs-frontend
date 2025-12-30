@@ -2,12 +2,10 @@
 import { lazy } from "react";
 import ProtectedRoute from "../components/protectedRoute";
 import useInactividadLogout from "../hooks/useInactividadLogout";
-
-// Layout público (no lazy, componentes chicos)
 import Navbar from "../components/navbar";
 import Footer from "../components/footer";
 
-// Públicos (lazy)
+/* -------------------- Públicos -------------------- */
 const Landing = lazy(() => import("../pages/landing"));
 const Contacto = lazy(() => import("../pages/contacto"));
 const Servicios = lazy(() => import("../pages/servicios"));
@@ -15,14 +13,11 @@ const Ubicacion = lazy(() => import("../pages/ubicacion"));
 const Nosotros = lazy(() => import("../pages/nosotros"));
 const Galeria = lazy(() => import("../pages/galeria"));
 
+/* -------------------- Login -------------------- */
 const Login = lazy(() => import("../pages/admin/login"));
 const LoginApoderado = lazy(() => import("../pages/admin/loginApoderado"));
 
-// Apoderados (lazy)
-const PortalApoderadoHome = lazy(() => import("../pages/apoderado/portalHome"));
-const CambiarClaveApoderado = lazy(() => import("../pages/apoderado/cambiarClave"));
-
-// Admin (lazy)
+/* -------------------- Admin -------------------- */
 const DashboardLayout = lazy(() => import("../pages/admin/dashboard"));
 const CrearJugador = lazy(() => import("../pages/admin/formjugador"));
 const ListarJugadores = lazy(() => import("../pages/admin/listarJugadores"));
@@ -36,9 +31,7 @@ const JugadoresPendientes = lazy(() =>
   import("../pages/admin/modulo-financiero/jugadoresPendientes")
 );
 const PowerbiFinanzas = lazy(() => import("../pages/admin/powerbiFinanzas"));
-const PagosCentralizados = lazy(() =>
-  import("../pages/admin/modulo-financiero/pagosCentralizados")
-);
+const PagosCentralizados = lazy(() => import("../pages/admin/modulo-financiero/pagosCentralizados"));
 const EstadosCuenta = lazy(() => import("../pages/admin/estadosCuenta"));
 
 const Configuracion = lazy(() => import("../pages/admin/configuracion"));
@@ -46,48 +39,31 @@ const Categorias = lazy(() => import("../pages/admin/configuracion/categorias"))
 const MediosPago = lazy(() => import("../pages/admin/configuracion/mediospago"));
 const TiposPago = lazy(() => import("../pages/admin/configuracion/tipospago"));
 const Roles = lazy(() => import("../pages/admin/configuracion/roles"));
-const EstadoJugadores = lazy(() =>
-  import("../pages/admin/configuracion/estadojugadores")
-);
+const EstadoJugadores = lazy(() => import("../pages/admin/configuracion/estadojugadores"));
 const Posiciones = lazy(() => import("../pages/admin/configuracion/posiciones"));
-const EstablecimientosEducacionales = lazy(() =>
-  import("../pages/admin/configuracion/estableceduc")
-);
-const PrevisionMedica = lazy(() =>
-  import("../pages/admin/configuracion/previsionmedica")
-);
+const EstablecimientosEducacionales = lazy(() => import("../pages/admin/configuracion/estableceduc"));
+const PrevisionMedica = lazy(() => import("../pages/admin/configuracion/previsionmedica"));
 const Sucursales = lazy(() => import("../pages/admin/configuracion/sucursales"));
 
 const CrearConvocatoria = lazy(() => import("../pages/admin/crearConvocatoria"));
 const DetalleJugador = lazy(() => import("../pages/admin/detalleJugador"));
-const VerConvocacionHistorica = lazy(() =>
-  import("../pages/admin/verConvocatoriaHistorica")
-);
-const RegistrarEstadisticas = lazy(() =>
-  import("../pages/admin/registraEstadistica")
-);
-const DetalleEstadistica = lazy(() =>
-  import("../pages/admin/detalleEstadistica")
-);
+const VerConvocacionHistorica = lazy(() => import("../pages/admin/verConvocatoriaHistorica"));
+const RegistrarEstadisticas = lazy(() => import("../pages/admin/registraEstadistica"));
+const DetalleEstadistica = lazy(() => import("../pages/admin/detalleEstadistica"));
+
+/* -------------------- Apoderado -------------------- */
+const PortalHome = lazy(() => import("../pages/apoderado/portalHome"));
+const PortalDashboard = lazy(() => import("../pages/apoderado/portalDashboard"));
+const CambiarClaveApoderado = lazy(() => import("../pages/apoderado/cambiarClave"));
 
 function Home() {
   return (
     <>
-      <section id="inicio" className="scroll-mt-16">
-        <Landing />
-      </section>
-      <section id="nosotros" className="scroll-mt-16">
-        <Nosotros />
-      </section>
-      <section id="servicios" className="scroll-mt-16">
-        <Servicios />
-      </section>
-      <section id="ubicacion" className="scroll-mt-16">
-        <Ubicacion />
-      </section>
-      <section id="contacto" className="scroll-mt-16">
-        <Contacto />
-      </section>
+      <section id="inicio" className="scroll-mt-16"><Landing /></section>
+      <section id="nosotros" className="scroll-mt-16"><Nosotros /></section>
+      <section id="servicios" className="scroll-mt-16"><Servicios /></section>
+      <section id="ubicacion" className="scroll-mt-16"><Ubicacion /></section>
+      <section id="contacto" className="scroll-mt-16"><Contacto /></section>
     </>
   );
 }
@@ -96,36 +72,33 @@ function PublicShell() {
   return (
     <div className="scroll-smooth w-full min-h-screen bg-gradient-to-br from-[#1d0b0b] via-[#1d0b0b] to-[#e82d89] text-white font-sans">
       <Navbar />
-      <main>
-        <Home />
-      </main>
+      <main><Home /></main>
       <Footer />
     </div>
   );
 }
 
-// 🔒 Activa auto-logout SOLO dentro del área privada
-function PrivateApp({ children }) {
+function PrivateApp({ children, redirectTo }) {
   useInactividadLogout({
     timeoutMs: 5 * 60 * 1000,
     pingMs: 15 * 1000,
+    redirectTo, // ✅ /login o /login-apoderado
   });
   return children;
 }
 
 export const routes = [
-  // Público
   { path: "/", element: <PublicShell /> },
+  { path: "/galeria", element: <Galeria /> },
   { path: "/login", element: <Login /> },
   { path: "/login-apoderado", element: <LoginApoderado /> },
-  { path: "/galeria", element: <Galeria /> },
 
-  // Admin protegido (mismo comportamiento que antes)
+  // ADMIN
   {
     path: "/admin",
     element: (
-      <ProtectedRoute roleIn={[1, 2]} mode="admin">
-        <PrivateApp>
+      <ProtectedRoute mode="admin" roleIn={[1, 2]}>
+        <PrivateApp redirectTo="/login">
           <DashboardLayout />
         </PrivateApp>
       </ProtectedRoute>
@@ -151,10 +124,7 @@ export const routes = [
       { path: "configuracion/roles", element: <Roles /> },
       { path: "configuracion/estados", element: <EstadoJugadores /> },
       { path: "configuracion/posiciones", element: <Posiciones /> },
-      {
-        path: "configuracion/establecimientos-educacionales",
-        element: <EstablecimientosEducacionales />,
-      },
+      { path: "configuracion/establecimientos-educacionales", element: <EstablecimientosEducacionales /> },
       { path: "configuracion/prevision-medica", element: <PrevisionMedica /> },
       { path: "configuracion/sucursales", element: <Sucursales /> },
 
@@ -166,22 +136,29 @@ export const routes = [
     ],
   },
 
-  // ✅ Portal Apoderado protegido
+  // APODERADO
+  // APODERADO
   {
     path: "/portal-apoderado",
     element: (
       <ProtectedRoute mode="apoderado">
-        <PrivateApp>
-          <PortalApoderadoHome />
+        <PrivateApp redirectTo="/login-apoderado">
+          {/* 👇 Este debe ser el layout del portal (dashboard / sidebar después) */}
+          <PortalDashboard />
         </PrivateApp>
       </ProtectedRoute>
     ),
-    children: [
-      { path: "cambiar-clave", element: <CambiarClaveApoderado /> },
-      // Luego agregamos:
-      // { path: "mis-jugadores", element: <MisJugadores /> },
-      // { path: "jugadores/:rut/pagos", element: <PagosJugador /> },
-      // { path: "jugadores/:rut/estadisticas", element: <EstadisticasJugador /> },
-    ],
   },
+  {
+    path: "/portal-apoderado/cambiar-clave",
+    element: (
+      <ProtectedRoute mode="apoderado">
+        <PrivateApp redirectTo="/login-apoderado">
+          {/* 👇 PortalHome ahora es SOLO el cambio de clave */}
+          <PortalHome />
+        </PrivateApp>
+      </ProtectedRoute>
+    ),
+  },
+
 ];

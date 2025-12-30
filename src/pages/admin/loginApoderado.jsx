@@ -5,7 +5,7 @@ import Footer from "../../components/footer";
 import IsLoading from "../../components/isLoading";
 import logoRAFC from "../../statics/logos/logo-sin-fondo.png";
 
-const TOKEN_KEY = "rafc_apoderado_token";
+const TOKEN_KEY = "rafc_token"; // ✅ MISMA KEY QUE TODO EL SISTEMA
 
 export default function LoginApoderado() {
   const [form, setForm] = useState({ rut: "", password: "" });
@@ -25,7 +25,6 @@ export default function LoginApoderado() {
     const { name, value } = e.target;
 
     if (name === "rut") {
-      // solo números, máx 8
       const clean = value.replace(/\D/g, "").slice(0, 8);
       setForm((prev) => ({ ...prev, rut: clean }));
     } else if (name === "password") {
@@ -49,20 +48,27 @@ export default function LoginApoderado() {
     try {
       try {
         localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem("apoderado_must_change_password");
       } catch {}
 
       const res = await loginService(form.rut, form.password);
-      const token = res?.token;
+
+      const token = res?.rafc_token; // ✅ NO ES res.token
 
       if (!token) {
-        setMensaje("❌ No se recibió token");
+        setMensaje("❌ No se recibió rafc_token");
         setIsLoading(false);
         return;
       }
 
       localStorage.setItem(TOKEN_KEY, token);
 
-      // flag para forzar cambio de clave
+      // ✅ flag para tu ProtectedRoute(mode="apoderado")
+      localStorage.setItem(
+        "apoderado_must_change_password",
+        res?.must_change_password ? "1" : "0"
+      );
+
       if (res?.must_change_password === true) {
         navigate("/portal-apoderado/cambiar-clave", { replace: true });
         return;
@@ -72,7 +78,8 @@ export default function LoginApoderado() {
     } catch (err) {
       const status = err?.response?.status ?? err?.status;
       if (status === 400 || status === 401) {
-        setMensaje("❌ Credenciales inválidas");
+        const msg = err?.response?.data?.message;
+        setMensaje(msg ? `❌ ${msg}` : "❌ Credenciales inválidas");
       } else {
         const msg =
           err?.response?.data?.message || err?.message || "Error de conexión";
@@ -85,32 +92,6 @@ export default function LoginApoderado() {
 
   return (
     <div className="min-h-screen flex flex-col justify-between bg-gradient-to-br from-[#1d0b0b] via-[#1d0b0b] to-[#e82d89] font-realacademy overflow-hidden">
-      {/* FX fondo */}
-      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
-        <div
-          className="absolute -top-44 left-1/2 -translate-x-1/2 w-[900px] h-[900px] rounded-full blur-3xl opacity-40"
-          style={{
-            background:
-              "radial-gradient(circle, rgba(232,45,137,0.55), transparent 60%)",
-          }}
-        />
-        <div
-          className="absolute -bottom-56 -left-40 w-[820px] h-[820px] rounded-full blur-3xl opacity-35"
-          style={{
-            background:
-              "radial-gradient(circle, rgba(0,0,0,0.65), transparent 60%)",
-          }}
-        />
-        <div
-          className="absolute inset-0 opacity-[0.08]"
-          style={{
-            backgroundImage:
-              "repeating-linear-gradient(135deg, rgba(255,255,255,0.6) 0px, rgba(255,255,255,0.6) 1px, transparent 1px, transparent 14px)",
-          }}
-        />
-      </div>
-
-      {/* Loader fullscreen */}
       {isLoading && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-md">
           <div className="flex flex-col items-center gap-3">
@@ -129,7 +110,8 @@ export default function LoginApoderado() {
 
       <section className="flex-grow flex items-center justify-center px-4 py-10">
         <div className="relative w-full max-w-md">
-          <div className="relative p-[2px] rounded-[28px]"
+          <div
+            className="relative p-[2px] rounded-[28px]"
             style={{
               background:
                 "linear-gradient(135deg, rgba(232,45,137,0.95), rgba(255,255,255,0.15), rgba(232,45,137,0.55))",
