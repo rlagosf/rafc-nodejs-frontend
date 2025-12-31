@@ -142,10 +142,15 @@ export const routes = [
     path: "/portal-apoderado",
     element: (
       <ProtectedRoute mode="apoderado">
-        <PrivateApp redirectTo="/login-apoderado">
-          {/* 👇 Este debe ser el layout del portal (dashboard / sidebar después) */}
+        <PrivateApp
+          redirectTo="/login-apoderado"
+          storageKey="rafc_lastActivity_apoderado"
+          forceKey="rafc_forceLogout_apoderado"
+          timeoutMs={15 * 60 * 1000} // por ejemplo 15 min para apoderados (o 30)
+        >
           <PortalDashboard />
         </PrivateApp>
+
       </ProtectedRoute>
     ),
   },
