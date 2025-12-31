@@ -64,6 +64,23 @@ const getList = async (path, signal) => {
   return [];
 };
 
+// ✅ DELETE tolerante a / y sin /
+const delWithVariants = async (path) => {
+  const variants = path.endsWith('/') ? [path, path.slice(0, -1)] : [path, `${path}/`];
+  let lastErr;
+  for (const url of variants) {
+    try {
+      return await api.delete(url);
+    } catch (e) {
+      lastErr = e;
+      // si es 404, probamos la variante; si es 500, no sirve seguir
+      const st = e?.response?.status;
+      if (st && st !== 404) throw e;
+    }
+  }
+  throw lastErr;
+};
+
 const isHoliday = (title = '') => {
   const t = String(title).toLowerCase();
   return t.includes('feriado') || t.includes('festivo');
@@ -226,7 +243,6 @@ export default function Agenda() {
 
   useMobileAutoScrollTop();
 
-
   // Carga de eventos
   useEffect(() => {
     const abort = new AbortController();
@@ -367,7 +383,9 @@ export default function Agenda() {
     setError('');
     setMensaje('');
     try {
-      await api.delete('/eventos/' + eventoSel.id);
+      // ✅ ahora tolera / y sin /
+      await delWithVariants('/eventos/' + eventoSel.id);
+
       setEventos((prev) => prev.filter((e) => e.id !== eventoSel.id));
       setModalDetalle(false);
       setMensaje('✅ Evento eliminado.');
@@ -400,23 +418,16 @@ export default function Agenda() {
           endAccessor="end"
           views={['month']}
           popup={false}
-          /* 🔧 Habilita selección por click incluso si hay eventos */
           selectable="ignoreEvents"
-          /* 🔧 Click rápido = selección (útil en móviles y para single click) */
           longPressThreshold={1}
-          /* 🔧 No bloquees ninguna selección */
           onSelecting={() => true}
-          /* Selección de día/slot */
           onSelectSlot={(slotInfo) => {
-            // Algunas versiones envían { action: 'doubleClick' } para doble click:
             if (slotInfo?.action === 'doubleClick') {
               abrirModal(slotInfo);
               return;
             }
-            // Single-click normal:
             abrirModal(slotInfo);
           }}
-          /* Doble click sobre un evento: abrimos detalle (ya lo tenías) */
           onDoubleClickEvent={(e) => { setEventoSel(e); setModalDetalle(true); }}
           dayLayoutAlgorithm="no-overlap"
           style={{ minHeight: 680, height: '100%', width: '100%' }}
