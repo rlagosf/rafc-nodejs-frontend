@@ -75,8 +75,15 @@ api.interceptors.response.use(
 
     // 401 → limpiar token (y header)
     if (status === 401) {
-      clearToken();
+      const msg = String(data?.message || "").toLowerCase();
+      const shouldClear =
+        msg.includes("token inválido") ||
+        msg.includes("expirado") ||
+        msg.includes("falta bearer");
+
+      if (shouldClear) clearToken();
     }
+
 
     const norm = {
       status,

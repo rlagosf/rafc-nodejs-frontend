@@ -5,14 +5,14 @@ import logoRAFC from '../statics/logos/logo-sin-fondo.png';
 
 export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isLoginOpen, setIsLoginOpen] = useState(false); // 👈 dropdown login (admin/apoderado)
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [scrolledPastHero, setScrolledPastHero] = useState(false);
   const [tocaDifuminado, setTocaDifuminado] = useState(false);
-  const [showNavbar, setShowNavbar] = useState(true); // 👈 ocultar/mostrar navbar
+  const [showNavbar, setShowNavbar] = useState(true);
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
-    setIsLoginOpen(false); // evita dropdown colgado
+    setIsLoginOpen(false);
   };
 
   const toggleLogin = () => setIsLoginOpen((v) => !v);
@@ -48,7 +48,6 @@ export default function Navbar() {
     };
   }, []);
 
-  // 👇 ocultar navbar en móviles al hacer scroll hacia abajo
   useEffect(() => {
     let lastScrollY = window.scrollY;
 
@@ -59,13 +58,9 @@ export default function Navbar() {
         return;
       }
 
-      if (window.scrollY <= 10) {
-        setShowNavbar(true);
-      } else if (window.scrollY > lastScrollY) {
-        setShowNavbar(false);
-      } else {
-        setShowNavbar(true);
-      }
+      if (window.scrollY <= 10) setShowNavbar(true);
+      else if (window.scrollY > lastScrollY) setShowNavbar(false);
+      else setShowNavbar(true);
 
       lastScrollY = window.scrollY;
     };
@@ -74,7 +69,7 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // 👇 cerrar dropdown login al click fuera
+  // ✅ cerrar dropdown login al click fuera (desktop + mobile)
   useEffect(() => {
     const onClick = (e) => {
       if (!e.target.closest?.('#login-dropdown')) setIsLoginOpen(false);
@@ -83,27 +78,28 @@ export default function Navbar() {
     return () => document.removeEventListener('click', onClick);
   }, []);
 
-  // 🔷 Fondo navbar superior (pantallas grandes)
   const topBarBackground = scrolledPastHero
     ? 'bg-black/80 backdrop-blur-md'
     : 'bg-transparent backdrop-blur-md';
 
-  // 🔷 Fondo menú hamburguesa abierto
   const menuMobileBackground =
     isMenuOpen && tocaDifuminado
       ? 'bg-[#1d0b0b] backdrop-blur-md'
       : 'bg-transparent';
 
+  // ✅ paths desde /public
+  const ADMIN_ICON = "/LOGO_SIN_FONDO_ROSA.png";
+  const APODERADO_ICON = "/logo-en-blanco.png";
+
   return (
     <nav
-      className={`fixed top-0 left-0 w-full z-50 font-sans text-white transition-all duration-500 ease-in-out transform ${showNavbar ? 'translate-y-0' : '-translate-y-full'
-        }`}
+      className={`fixed top-0 left-0 w-full z-50 font-sans text-white transition-all duration-500 ease-in-out transform ${
+        showNavbar ? 'translate-y-0' : '-translate-y-full'
+      }`}
     >
-      {/* 🔸 Barra superior completa */}
       <div
         className={`w-full px-8 lg:px-40 py-4 flex justify-between items-center transition-all duration-500 ease-in-out ${topBarBackground}`}
       >
-        {/* 🔹 Logo + redes sociales */}
         <div className="flex items-center gap-6">
           <ScrollLink
             to="inicio"
@@ -173,7 +169,7 @@ export default function Navbar() {
             </li>
           ))}
 
-          {/* ✅ Dropdown login */}
+          {/* ✅ Dropdown login DESKTOP */}
           <li className="relative" id="login-dropdown">
             <button
               type="button"
@@ -183,23 +179,32 @@ export default function Navbar() {
               Iniciar sesión
             </button>
 
-
             {isLoginOpen && (
-              <div className="absolute right-0 mt-3 w-56 rounded-xl bg-black/90 backdrop-blur-md border border-white/10 shadow-xl overflow-hidden">
+              <div className="absolute right-0 mt-3 w-64 rounded-xl bg-black/90 backdrop-blur-md border border-white/10 shadow-xl overflow-hidden">
                 <RouterLink
                   to="/login"
-                  className="block px-4 py-3 text-sm hover:bg-white/10 transition"
+                  className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-white/10 transition"
                   onClick={() => setIsLoginOpen(false)}
                 >
-                  🔐 Panel Administración
+                  <img
+                    src={ADMIN_ICON}
+                    alt="Admin"
+                    className="w-6 h-6 object-contain"
+                  />
+                  <span>Panel Administración</span>
                 </RouterLink>
 
                 <RouterLink
                   to="/login-apoderado"
-                  className="block px-4 py-3 text-sm hover:bg-white/10 transition"
+                  className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-white/10 transition"
                   onClick={() => setIsLoginOpen(false)}
                 >
-                  👨‍👩‍👦 Portal Apoderados
+                  <img
+                    src={APODERADO_ICON}
+                    alt="Apoderados"
+                    className="w-6 h-6 object-contain"
+                  />
+                  <span>Portal Apoderados</span>
                 </RouterLink>
               </div>
             )}
@@ -219,19 +224,9 @@ export default function Navbar() {
             viewBox="0 0 24 24"
           >
             {isMenuOpen ? (
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             ) : (
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 8h16M4 16h16"
-              />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
             )}
           </svg>
         </button>
@@ -241,6 +236,7 @@ export default function Navbar() {
       {isMenuOpen && (
         <div
           className={`md:hidden px-4 py-4 space-y-4 text-sm font-medium transition-all duration-300 ${menuMobileBackground}`}
+          id="login-dropdown" // ✅ CLAVE: ahora el click fuera no lo mata
         >
           {navLinks.map(({ name, target }) => (
             <ScrollLink
@@ -257,7 +253,7 @@ export default function Navbar() {
             </ScrollLink>
           ))}
 
-          {/* ✅ Login móvil con 2 opciones */}
+          {/* ✅ Login móvil con 2 opciones (ahora sí despliega) */}
           <div className="space-y-3">
             <button
               type="button"
@@ -271,60 +267,50 @@ export default function Navbar() {
               <div className="space-y-2 pl-3 border-l border-white/20">
                 <RouterLink
                   to="/login"
-                  className="block hover:text-[#e82d89]"
+                  className="flex items-center gap-3 py-2 hover:text-[#e82d89]"
                   onClick={() => {
                     setIsLoginOpen(false);
                     toggleMenu();
                   }}
                 >
-                  🔐 Panel Administración
+                  <img
+                    src={ADMIN_ICON}
+                    alt="Admin"
+                    className="w-6 h-6 object-contain"
+                  />
+                  <span>Panel Administración</span>
                 </RouterLink>
 
                 <RouterLink
                   to="/login-apoderado"
-                  className="block hover:text-[#e82d89]"
+                  className="flex items-center gap-3 py-2 hover:text-[#e82d89]"
                   onClick={() => {
                     setIsLoginOpen(false);
                     toggleMenu();
                   }}
                 >
-                  👨‍👩‍👦 Portal Apoderados
+                  <img
+                    src={APODERADO_ICON}
+                    alt="Apoderados"
+                    className="w-6 h-6 object-contain"
+                  />
+                  <span>Portal Apoderados</span>
                 </RouterLink>
               </div>
             )}
           </div>
 
           <div className="flex justify-center pt-4 space-x-5 text-xl border-t border-white/20 mt-4">
-            <a
-              href="https://wa.me/56967438184"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-green-400 transition"
-            >
+            <a href="https://wa.me/56967438184" target="_blank" rel="noopener noreferrer" className="hover:text-green-400 transition">
               <i className="fab fa-whatsapp"></i>
             </a>
-            <a
-              href="https://www.facebook.com/realacademyfc"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-blue-500 transition"
-            >
+            <a href="https://www.facebook.com/realacademyfc" target="_blank" rel="noopener noreferrer" className="hover:text-blue-500 transition">
               <i className="fab fa-facebook-f"></i>
             </a>
-            <a
-              href="https://www.instagram.com/realacademyfc"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-pink-400 transition"
-            >
+            <a href="https://www.instagram.com/realacademyfc" target="_blank" rel="noopener noreferrer" className="hover:text-pink-400 transition">
               <i className="fab fa-instagram"></i>
             </a>
-            <a
-              href="https://www.linkedin.com/company/realacademyfc"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-blue-300 transition"
-            >
+            <a href="https://www.linkedin.com/company/realacademyfc" target="_blank" rel="noopener noreferrer" className="hover:text-blue-300 transition">
               <i className="fab fa-linkedin-in"></i>
             </a>
           </div>

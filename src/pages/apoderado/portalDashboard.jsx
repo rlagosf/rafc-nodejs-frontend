@@ -3,27 +3,39 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { clearToken } from "../../services/api";
 import IsLoading from "../../components/isLoading";
+import { useTheme } from "../../context/ThemeContext";
+import { FiSettings, FiLogOut, FiSun, FiMoon } from "react-icons/fi";
+
 
 const ACCENT = "#e82d89";
 
 // Negocio (homologado con Admin)
 const TIPO_PAGO_MENSUALIDAD = 3;
 
-const SectionBtn = ({ active, icon, label, onClick }) => (
+// ✅ Botón de sección con soporte Dark Mode
+const SectionBtn = ({ active, icon, label, onClick, darkMode }) => (
   <button
     type="button"
     onClick={onClick}
     className={[
-      "w-full flex items-center gap-3 rounded-xl px-4 py-3 font-extrabold tracking-wide transition",
+      "w-full flex items-center gap-3 rounded-xl px-4 py-3 font-extrabold tracking-wide transition border",
       active
-        ? "bg-white shadow-sm border border-black/10 text-[#1a1a1a]"
-        : "bg-transparent hover:bg-white/60 text-black/70",
+        ? darkMode
+          ? "bg-white/10 border-white/10 text-white"
+          : "bg-white shadow-sm border-black/10 text-[#1a1a1a]"
+        : darkMode
+          ? "bg-transparent hover:bg-white/5 border-white/10 text-white/75"
+          : "bg-transparent hover:bg-white/60 border-black/10 text-black/70",
     ].join(" ")}
   >
     <span
       className={[
         "inline-flex h-9 w-9 items-center justify-center rounded-xl font-black",
-        active ? "bg-[#e82d89]/15 text-[#e82d89]" : "bg-black/5 text-black/60",
+        active
+          ? "bg-[#e82d89]/15 text-[#e82d89]"
+          : darkMode
+            ? "bg-white/10 text-white/60"
+            : "bg-black/5 text-black/60",
       ].join(" ")}
       aria-hidden
     >
@@ -33,8 +45,14 @@ const SectionBtn = ({ active, icon, label, onClick }) => (
   </button>
 );
 
-const Pill = ({ children }) => (
-  <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold bg-black/5 text-black/70">
+// ✅ Pill con soporte Dark Mode
+const Pill = ({ children, darkMode }) => (
+  <span
+    className={[
+      "inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold",
+      darkMode ? "bg-white/10 text-white/75" : "bg-black/5 text-black/70",
+    ].join(" ")}
+  >
     {children}
   </span>
 );
@@ -88,15 +106,17 @@ const normalizeSituacion = (p) => {
   return s || "—";
 };
 
-const situacionClass = (situacion) => {
+const situacionClass = (situacion, darkMode) => {
   const s = String(situacion || "").toUpperCase();
-  if (s === "PAGADO") return "text-green-700";
-  if (s === "VENCIDO") return "text-red-700";
-  return "text-black/70";
+  if (s === "PAGADO") return "text-green-600";
+  if (s === "VENCIDO") return "text-red-500";
+  return darkMode ? "text-white/70" : "text-black/70";
 };
 
 export default function PortalDashboard() {
   const navigate = useNavigate();
+  const { darkMode, toggleTheme } = useTheme();
+
 
   const [isLoading, setIsLoading] = useState(true);
   const [jugadores, setJugadores] = useState([]);
@@ -209,12 +229,10 @@ export default function PortalDashboard() {
       try {
         localStorage.removeItem("user_info");
         localStorage.removeItem("apoderado_must_change_password");
-      } catch {}
+      } catch { }
       navigate("/", { replace: true });
     }
   };
-
-  const goChangePassword = () => navigate("/portal-apoderado/cambiar-clave", { replace: true });
 
   const jugador = detalle?.jugador || null;
   const estadisticas = detalle?.estadisticas || null;
@@ -263,37 +281,60 @@ export default function PortalDashboard() {
     return pagosRaw.reduce((a, p) => a + Number(p?.monto || 0), 0);
   }, [pagosRaw]);
 
+  // ✅ estilos base segun modo
+  const pageClass = darkMode ? "text-white bg-[#0b0b0e]" : "text-[#1a1a1a] bg-[#e9eaec]";
+  const surfaceClass = darkMode
+    ? "border-white/10 bg-[#121214]"
+    : "border-black/10 bg-[#f2f2f3]";
+  const cardClass = darkMode ? "border-white/10 bg-[#0f0f12]" : "border-black/10 bg-white";
+  const mutedText = darkMode ? "text-white/65" : "text-black/60";
+  const softText = darkMode ? "text-white/75" : "text-black/70";
+  const labelText = darkMode ? "text-white/50" : "text-black/50";
+  const labelFaint = darkMode ? "text-white/40" : "text-black/40";
+
   if (isLoading) return <IsLoading />;
 
   return (
-    <div className="min-h-screen font-realacademy text-[#1a1a1a] bg-[#e9eaec]">
+    <div className={["min-h-screen font-realacademy", pageClass].join(" ")}>
       {/* Brillo suave */}
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
         <div
           className="absolute -top-40 left-1/2 -translate-x-1/2 w-[980px] h-[980px] rounded-full blur-3xl opacity-60"
-          style={{ background: "radial-gradient(circle, rgba(232,45,137,0.18), transparent 60%)" }}
+          style={{
+            background: darkMode
+              ? "radial-gradient(circle, rgba(232,45,137,0.12), transparent 60%)"
+              : "radial-gradient(circle, rgba(232,45,137,0.18), transparent 60%)",
+          }}
         />
         <div
           className="absolute -bottom-56 right-[-180px] w-[900px] h-[900px] rounded-full blur-3xl opacity-50"
-          style={{ background: "radial-gradient(circle, rgba(0,0,0,0.06), transparent 60%)" }}
+          style={{
+            background: darkMode
+              ? "radial-gradient(circle, rgba(232,45,137,0.10), transparent 60%)"
+              : "radial-gradient(circle, rgba(0,0,0,0.06), transparent 60%)",
+          }}
         />
         <div
-          className="absolute inset-0 opacity-[0.12]"
+          className="absolute inset-0"
           style={{
-            backgroundImage:
-              "repeating-linear-gradient(135deg, rgba(0,0,0,0.08) 0px, rgba(0,0,0,0.08) 1px, transparent 1px, transparent 18px)",
+            opacity: darkMode ? 0.06 : 0.12,
+            backgroundImage: darkMode
+              ? "repeating-linear-gradient(135deg, rgba(255,255,255,0.10) 0px, rgba(255,255,255,0.10) 1px, transparent 1px, transparent 18px)"
+              : "repeating-linear-gradient(135deg, rgba(0,0,0,0.08) 0px, rgba(0,0,0,0.08) 1px, transparent 1px, transparent 18px)",
           }}
         />
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-6">
+      <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 py-6">
+
+
         {/* Topbar */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-3xl sm:text-4xl font-extrabold tracking-widest uppercase text-[#e82d89]">
               Portal Apoderados
             </h1>
-            <p className="mt-1 text-sm font-semibold text-black/60">
+            <p className={["mt-1 text-sm font-semibold", mutedText].join(" ")}>
               Todo lo de tu jugador, sin vueltas. (La pelota al pie 😄)
             </p>
           </div>
@@ -301,18 +342,46 @@ export default function PortalDashboard() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={goChangePassword}
-              className="rounded-xl px-4 py-2 font-extrabold uppercase tracking-widest bg-white border border-black/10 hover:bg-white/70 transition text-[#1a1a1a]"
+              onClick={toggleTheme}
+              className={[
+                "rounded-xl px-3 py-2 border transition inline-flex items-center justify-center",
+                darkMode
+                  ? "bg-[#121214] border-white/10 text-white hover:bg-[#1a1a1d]"
+                  : "bg-white border-black/10 text-[#1a1a1a] hover:bg-white/70",
+              ].join(" ")}
+              title={darkMode ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+              aria-label={darkMode ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
             >
-              Seguridad
+              {darkMode ? (
+                <FiSun size={18} style={{ color: ACCENT }} />
+              ) : (
+                <FiMoon size={18} style={{ color: ACCENT }} />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate("/portal-apoderado/configuracion")}
+              className={[
+                "rounded-xl px-4 py-2 font-extrabold uppercase tracking-widest border transition inline-flex items-center gap-2",
+                darkMode
+                  ? "bg-[#121214] border-white/10 text-white hover:bg-[#1a1a1d]"
+                  : "bg-white border-black/10 text-[#1a1a1a] hover:bg-white/70",
+              ].join(" ")}
+              title="Configuración"
+            >
+              <FiSettings size={18} style={{ color: ACCENT }} />
+
             </button>
 
             <button
               type="button"
               onClick={handleLogout}
-              className="rounded-xl px-4 py-2 font-extrabold uppercase tracking-widest bg-[#e82d89] text-white hover:bg-[#c61f74] transition"
+              className="rounded-xl px-4 py-2 font-extrabold uppercase tracking-widest bg-[#e82d89] text-white hover:bg-[#c61f74] transition inline-flex items-center gap-2"
+              title="Cerrar sesión"
             >
-              Cerrar sesión
+              <FiLogOut size={18} />
+
             </button>
           </div>
         </div>
@@ -320,28 +389,45 @@ export default function PortalDashboard() {
         {/* Layout */}
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-5">
           {/* Sidebar */}
-          <aside className="rounded-[26px] border border-black/10 bg-[#f2f2f3] shadow-[0_20px_70px_rgba(0,0,0,0.08)] p-4 sm:p-5">
+          <aside
+            className={[
+              "rounded-[26px] border shadow-[0_20px_70px_rgba(0,0,0,0.08)] p-4 sm:p-5",
+              surfaceClass,
+            ].join(" ")}
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-black tracking-[0.35em] uppercase text-black/50">
+                <p className={["text-xs font-black tracking-[0.35em] uppercase", labelText].join(" ")}>
                   Jugadores
                 </p>
-                <p className="mt-1 text-sm font-extrabold text-black/80">
+                <p className={["mt-1 text-sm font-extrabold", darkMode ? "text-white/85" : "text-black/80"].join(" ")}>
                   Selecciona a quién quieres ver
                 </p>
               </div>
-              <Pill>{jugadores.length} asociado(s)</Pill>
+              <Pill darkMode={darkMode}>{jugadores.length} asociado(s)</Pill>
             </div>
 
             <div className="mt-4 space-y-2">
               {error && (
-                <div className="rounded-2xl border border-red-200 bg-red-50 text-red-700 font-extrabold p-4">
+                <div
+                  className={[
+                    "rounded-2xl border font-extrabold p-4",
+                    darkMode
+                      ? "border-red-500/30 bg-red-500/10 text-red-200"
+                      : "border-red-200 bg-red-50 text-red-700",
+                  ].join(" ")}
+                >
                   ❌ {error}
                 </div>
               )}
 
               {!error && jugadores.length === 0 && (
-                <div className="rounded-2xl border border-black/10 bg-white p-4 text-black/70 font-semibold">
+                <div
+                  className={[
+                    "rounded-2xl border p-4 font-semibold",
+                    darkMode ? "border-white/10 bg-[#0f0f12] text-white/75" : "border-black/10 bg-white text-black/70",
+                  ].join(" ")}
+                >
                   No hay jugadores asociados a este apoderado.
                 </div>
               )}
@@ -359,18 +445,25 @@ export default function PortalDashboard() {
                         className={[
                           "w-full text-left rounded-2xl border transition p-4",
                           active
-                            ? "border-[#e82d89]/40 bg-white shadow-sm"
-                            : "border-black/10 bg-white/60 hover:bg-white",
+                            ? darkMode
+                              ? "border-[#e82d89]/50 bg-white/10"
+                              : "border-[#e82d89]/40 bg-white shadow-sm"
+                            : darkMode
+                              ? "border-white/10 bg-white/5 hover:bg-white/10"
+                              : "border-black/10 bg-white/60 hover:bg-white",
                         ].join(" ")}
                       >
-                        <p className="text-xs font-black tracking-[0.35em] uppercase text-black/40">
+                        <p className={["text-xs font-black tracking-[0.35em] uppercase", labelFaint].join(" ")}>
                           Jugador
                         </p>
-                        <p className="mt-1 text-sm font-extrabold text-black">
+                        <p className={["mt-1 text-sm font-extrabold", darkMode ? "text-white" : "text-black"].join(" ")}>
                           {j?.nombre_jugador || "Sin nombre"}
                         </p>
-                        <p className="mt-1 text-xs font-semibold text-black/60">
-                          RUT: <span className="font-extrabold text-black/80">{rut}</span>
+                        <p className={["mt-1 text-xs font-semibold", mutedText].join(" ")}>
+                          RUT:{" "}
+                          <span className={["font-extrabold", darkMode ? "text-white/85" : "text-black/80"].join(" ")}>
+                            {rut}
+                          </span>
                         </p>
                       </button>
                     );
@@ -380,48 +473,56 @@ export default function PortalDashboard() {
             </div>
 
             <div className="mt-6">
-              <p className="text-xs font-black tracking-[0.35em] uppercase text-black/50 mb-3">
+              <p className={["text-xs font-black tracking-[0.35em] uppercase mb-3", labelText].join(" ")}>
                 Secciones
               </p>
 
               <div className="space-y-2">
-                <SectionBtn active={section === "datos"} icon="D" label="Datos del jugador" onClick={() => setSection("datos")} />
-                <SectionBtn active={section === "pagos"} icon="P" label="Pagos" onClick={() => setSection("pagos")} />
-                <SectionBtn active={section === "agenda"} icon="A" label="Agenda" onClick={() => setSection("agenda")} />
-                <SectionBtn active={section === "estadisticas"} icon="E" label="Estadísticas" onClick={() => setSection("estadisticas")} />
-                <SectionBtn active={section === "contrato"} icon="C" label="Contrato" onClick={() => setSection("contrato")} />
+                <SectionBtn darkMode={darkMode} active={section === "datos"} icon="D" label="Datos del jugador" onClick={() => setSection("datos")} />
+                <SectionBtn darkMode={darkMode} active={section === "pagos"} icon="P" label="Pagos" onClick={() => setSection("pagos")} />
+                <SectionBtn darkMode={darkMode} active={section === "agenda"} icon="A" label="Agenda" onClick={() => setSection("agenda")} />
+                <SectionBtn darkMode={darkMode} active={section === "estadisticas"} icon="E" label="Estadísticas" onClick={() => setSection("estadisticas")} />
+                <SectionBtn darkMode={darkMode} active={section === "contrato"} icon="C" label="Contrato" onClick={() => setSection("contrato")} />
               </div>
             </div>
           </aside>
 
           {/* Main */}
-          <main className="rounded-[26px] border border-black/10 bg-[#f2f2f3] shadow-[0_20px_70px_rgba(0,0,0,0.08)] p-5 sm:p-7">
+          <main
+            className={[
+              "rounded-[26px] border shadow-[0_20px_70px_rgba(0,0,0,0.08)] p-5 sm:p-7",
+              surfaceClass,
+            ].join(" ")}
+          >
             {/* Header jugador */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <p className="text-xs font-black tracking-[0.35em] uppercase text-black/50">
+                <p className={["text-xs font-black tracking-[0.35em] uppercase", labelText].join(" ")}>
                   Jugador seleccionado
                 </p>
-                <h2 className="mt-2 text-2xl sm:text-3xl font-extrabold text-black">
+                <h2 className={["mt-2 text-2xl sm:text-3xl font-extrabold", darkMode ? "text-white" : "text-black"].join(" ")}>
                   {jugadorSel?.nombre_jugador || "—"}
                 </h2>
-                <p className="mt-1 text-sm font-semibold text-black/60">
-                  RUT: <span className="font-extrabold text-black/80">{jugadorSel?.rut_jugador || "—"}</span>
+                <p className={["mt-1 text-sm font-semibold", mutedText].join(" ")}>
+                  RUT:{" "}
+                  <span className={["font-extrabold", darkMode ? "text-white/85" : "text-black/80"].join(" ")}>
+                    {jugadorSel?.rut_jugador || "—"}
+                  </span>
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
-                <Pill>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Pill darkMode={darkMode}>
                   Sección:{" "}
                   <span className="ml-1 font-extrabold" style={{ color: ACCENT }}>
                     {section}
                   </span>
                 </Pill>
 
-                {detalleLoading && <Pill>Cargando…</Pill>}
+                {detalleLoading && <Pill darkMode={darkMode}>Cargando…</Pill>}
 
                 {!detalleLoading && !["agenda", "estadisticas", "contrato", "datos"].includes(section) && (
-                  <Pill>
+                  <Pill darkMode={darkMode}>
                     Último pago:{" "}
                     <span className="ml-1 font-extrabold" style={{ color: ACCENT }}>
                       {lastPago ? fmtDate(lastPago.fecha_pago) : "—"}
@@ -431,7 +532,7 @@ export default function PortalDashboard() {
               </div>
             </div>
 
-            <div className="mt-6 border-t border-black/10 pt-6">
+            <div className={["mt-6 pt-6 border-t", darkMode ? "border-white/10" : "border-black/10"].join(" ")}>
               {/* DATOS */}
               {section === "datos" && (
                 <div className="space-y-4">
@@ -440,36 +541,36 @@ export default function PortalDashboard() {
                   </h3>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="rounded-2xl border border-black/10 bg-white p-5">
-                      <p className="text-xs font-black tracking-[0.35em] uppercase text-black/40">
+                    <div className={["rounded-2xl border p-5", cardClass].join(" ")}>
+                      <p className={["text-xs font-black tracking-[0.35em] uppercase", labelFaint].join(" ")}>
                         Información general
                       </p>
-                      <div className="mt-3 space-y-2 text-sm font-semibold text-black/70">
-                        <p>Fecha nacimiento: <span className="font-extrabold">{fmtDate(jugador?.fecha_nacimiento)}</span></p>
-                        <p>Edad: <span className="font-extrabold">{jugador?.edad ?? "—"}</span></p>
-                        <p>Email: <span className="font-extrabold">{jugador?.email || "—"}</span></p>
-                        <p>Teléfono: <span className="font-extrabold">{jugador?.telefono || "—"}</span></p>
-                        <p>Dirección: <span className="font-extrabold">{jugador?.direccion || "—"}</span></p>
+                      <div className={["mt-3 space-y-2 text-sm font-semibold", softText].join(" ")}>
+                        <p>Fecha nacimiento: <span className={darkMode ? "text-white font-extrabold" : "font-extrabold text-black"}>{fmtDate(jugador?.fecha_nacimiento)}</span></p>
+                        <p>Edad: <span className={darkMode ? "text-white font-extrabold" : "font-extrabold text-black"}>{jugador?.edad ?? "—"}</span></p>
+                        <p>Email: <span className={darkMode ? "text-white font-extrabold" : "font-extrabold text-black"}>{jugador?.email || "—"}</span></p>
+                        <p>Teléfono: <span className={darkMode ? "text-white font-extrabold" : "font-extrabold text-black"}>{jugador?.telefono || "—"}</span></p>
+                        <p>Dirección: <span className={darkMode ? "text-white font-extrabold" : "font-extrabold text-black"}>{jugador?.direccion || "—"}</span></p>
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-black/10 bg-white p-5">
-                      <p className="text-xs font-black tracking-[0.35em] uppercase text-black/40">
+                    <div className={["rounded-2xl border p-5", cardClass].join(" ")}>
+                      <p className={["text-xs font-black tracking-[0.35em] uppercase", labelFaint].join(" ")}>
                         Fútbol / Academia
                       </p>
-                      <div className="mt-3 space-y-2 text-sm font-semibold text-black/70">
-                        <p>Categoría: <span className="font-extrabold">{jugador?.categoria?.nombre || "—"}</span></p>
-                        <p>Posición: <span className="font-extrabold">{jugador?.posicion?.nombre || "—"}</span></p>
-                        <p>Sucursal: <span className="font-extrabold">{jugador?.sucursal?.nombre || "—"}</span></p>
-                        <p>Estado: <span className="font-extrabold">{jugador?.estado?.nombre || "—"}</span></p>
+                      <div className={["mt-3 space-y-2 text-sm font-semibold", softText].join(" ")}>
+                        <p>Categoría: <span className={darkMode ? "text-white font-extrabold" : "font-extrabold text-black"}>{jugador?.categoria?.nombre || "—"}</span></p>
+                        <p>Posición: <span className={darkMode ? "text-white font-extrabold" : "font-extrabold text-black"}>{jugador?.posicion?.nombre || "—"}</span></p>
+                        <p>Sucursal: <span className={darkMode ? "text-white font-extrabold" : "font-extrabold text-black"}>{jugador?.sucursal?.nombre || "—"}</span></p>
+                        <p>Estado: <span className={darkMode ? "text-white font-extrabold" : "font-extrabold text-black"}>{jugador?.estado?.nombre || "—"}</span></p>
                       </div>
                     </div>
 
-                    <div className="md:col-span-2 rounded-2xl border border-black/10 bg-white p-5">
-                      <p className="text-xs font-black tracking-[0.35em] uppercase text-black/40">
+                    <div className={["md:col-span-2 rounded-2xl border p-5", cardClass].join(" ")}>
+                      <p className={["text-xs font-black tracking-[0.35em] uppercase", labelFaint].join(" ")}>
                         Observaciones
                       </p>
-                      <p className="mt-3 text-sm font-semibold text-black/70">
+                      <p className={["mt-3 text-sm font-semibold", softText].join(" ")}>
                         {jugador?.observaciones || "—"}
                       </p>
                     </div>
@@ -484,35 +585,44 @@ export default function PortalDashboard() {
                     Pagos
                   </h3>
 
-                  <div className="rounded-2xl border border-black/10 bg-white p-5">
+                  <div className={["rounded-2xl border p-5", cardClass].join(" ")}>
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                      <p className="text-sm font-semibold text-black/70">
-                        Pagos registrados: <span className="font-extrabold">{pagosRaw.length}</span>
+                      <p className={["text-sm font-semibold", softText].join(" ")}>
+                        Pagos registrados:{" "}
+                        <span className={darkMode ? "font-extrabold text-white" : "font-extrabold text-black"}>
+                          {pagosRaw.length}
+                        </span>
                       </p>
-                      <Pill>
+                      <Pill darkMode={darkMode}>
                         Total aprox:{" "}
-                        <span className="ml-1 font-extrabold">
+                        <span className={["ml-1 font-extrabold", darkMode ? "text-white" : "text-black"].join(" ")}>
                           {fmtCLP(totalAprox)}
                         </span>
                       </Pill>
                     </div>
 
                     <div className="mt-4 overflow-auto">
-                      <table className="min-w-[820px] w-full text-sm">
+                      {/* 👇 subimos el min-width para que quepa “Observaciones” */}
+                      <table className="min-w-[1120px] w-full text-sm">
                         <thead>
-                          <tr className="text-left text-black/60">
+                          <tr className={["text-left", mutedText].join(" ")}>
                             <th className="py-2 pr-4">Fecha</th>
                             <th className="py-2 pr-4">Tipo</th>
                             <th className="py-2 pr-4">Medio</th>
                             <th className="py-2 pr-4">Situación</th>
                             <th className="py-2 pr-4 text-center">Monto</th>
+
+                            {/* ✅ NUEVO */}
+                            <th className="py-2 pr-4">Observaciones</th>
+
                             <th className="py-2 text-center">Acciones</th>
                           </tr>
                         </thead>
+
                         <tbody>
                           {pagosView.length === 0 ? (
                             <tr>
-                              <td colSpan={6} className="py-4 text-black/60 font-semibold">
+                              <td colSpan={7} className={["py-4 font-semibold", mutedText].join(" ")}>
                                 Aún no hay pagos registrados para este jugador.
                               </td>
                             </tr>
@@ -520,32 +630,61 @@ export default function PortalDashboard() {
                             pagosView.map((p) => {
                               const situacion = normalizeSituacion(p);
 
+                              // ✅ Observaciones: intenta varias keys por compatibilidad
+                              const obsRaw =
+                                p?.observaciones ??
+                                p?.observacion ??
+                                p?.detalle ??
+                                p?.descripcion ??
+                                p?.comentario ??
+                                p?.nota ??
+                                null;
+
+                              const obs = String(obsRaw ?? "").trim();
+
                               return (
                                 <tr
                                   key={String(p?.id ?? Math.random())}
-                                  className="border-t border-black/10"
+                                  className={["border-t", darkMode ? "border-white/10" : "border-black/10"].join(" ")}
                                 >
-                                  <td className="py-3 pr-4 font-semibold">
+                                  <td className={["py-3 pr-4 font-semibold", softText].join(" ")}>
                                     {fmtDate(p?.fecha_pago)}
                                   </td>
 
-                                  <td className="py-3 pr-4 font-semibold">
+                                  <td className={["py-3 pr-4 font-semibold", softText].join(" ")}>
                                     {p?.tipo_pago?.nombre ?? p?.tipo_pago_id ?? "—"}
                                   </td>
 
-                                  <td className="py-3 pr-4 font-semibold">
+                                  <td className={["py-3 pr-4 font-semibold", softText].join(" ")}>
                                     {p?.medio_pago?.nombre ?? p?.medio_pago_id ?? "—"}
                                   </td>
 
-                                  <td className={`py-3 pr-4 font-extrabold ${situacionClass(situacion)}`}>
+                                  <td className={["py-3 pr-4 font-extrabold", situacionClass(situacion, darkMode)].join(" ")}>
                                     {situacion}
                                   </td>
 
-                                  <td className="py-3 pr-4 font-extrabold text-center">
+                                  <td className={["py-3 pr-4 font-extrabold text-center", darkMode ? "text-white" : "text-black"].join(" ")}>
                                     {fmtCLP(p?.monto)}
                                   </td>
 
-                                  <td className="py-3 text-center font-semibold text-black/60">
+                                  {/* ✅ NUEVA CELDA */}
+                                  <td className={["py-3 pr-4 font-semibold", softText].join(" ")}>
+                                    {obs ? (
+                                      <span
+                                        className={[
+                                          "inline-block max-w-[420px] truncate",
+                                          darkMode ? "text-white/80" : "text-black/70",
+                                        ].join(" ")}
+                                        title={obs}
+                                      >
+                                        {obs}
+                                      </span>
+                                    ) : (
+                                      <span className={mutedText}>—</span>
+                                    )}
+                                  </td>
+
+                                  <td className={["py-3 text-center font-semibold", mutedText].join(" ")}>
                                     —
                                   </td>
                                 </tr>
@@ -559,14 +698,15 @@ export default function PortalDashboard() {
                 </div>
               )}
 
+
               {/* AGENDA */}
               {section === "agenda" && (
                 <div className="space-y-4">
                   <h3 className="text-lg font-extrabold text-[#e82d89] uppercase tracking-widest">
                     Agenda
                   </h3>
-                  <div className="rounded-2xl border border-black/10 bg-white p-5">
-                    <p className="text-sm font-semibold text-black/70">
+                  <div className={["rounded-2xl border p-5", cardClass].join(" ")}>
+                    <p className={["text-sm font-semibold", softText].join(" ")}>
                       Próximo: enganchar eventos/convocatorias del jugador (partidos/entrenamientos).
                     </p>
                   </div>
@@ -581,8 +721,8 @@ export default function PortalDashboard() {
                   </h3>
 
                   {(!estadisticas || Object.keys(estadisticas || {}).length === 0) ? (
-                    <div className="rounded-2xl border border-black/10 bg-white p-5">
-                      <p className="text-sm font-semibold text-black/70">
+                    <div className={["rounded-2xl border p-5", cardClass].join(" ")}>
+                      <p className={["text-sm font-semibold", softText].join(" ")}>
                         Aún no hay estadísticas registradas para este jugador.
                       </p>
                     </div>
@@ -591,12 +731,7 @@ export default function PortalDashboard() {
                       // --------------------------
                       // Helpers (no inventan datos)
                       // --------------------------
-                      const EXCLUDE_KEYS = new Set([
-                        "id",
-                        "estadistica_id",
-                        "created_at",
-                        "updated_at",
-                      ]);
+                      const EXCLUDE_KEYS = new Set(["id", "estadistica_id", "created_at", "updated_at"]);
 
                       const LABELS = {
                         // 🏟️ Participación
@@ -760,25 +895,24 @@ export default function PortalDashboard() {
                         const c1 = mix(basePair[0], f1);
                         const c2 = mix(basePair[1], f2);
 
-                        const track = "linear-gradient(90deg, rgba(0,0,0,0.12), rgba(0,0,0,0.06))";
+                        const track = darkMode
+                          ? "linear-gradient(90deg, rgba(255,255,255,0.10), rgba(255,255,255,0.06))"
+                          : "linear-gradient(90deg, rgba(0,0,0,0.12), rgba(0,0,0,0.06))";
 
                         return (
                           <div className="py-2">
                             <div className="flex items-center justify-between gap-3">
-                              <p className="text-[12px] font-extrabold text-black/70 truncate">
+                              <p className={["text-[12px] font-extrabold truncate", softText].join(" ")}>
                                 {formatLabel(k)}
                               </p>
 
-                              <p className="text-[12px] font-black text-black/60 tabular-nums shrink-0">
+                              <p className={["text-[12px] font-black tabular-nums shrink-0", mutedText].join(" ")}>
                                 {formatValue(k, raw)}{" "}
-                                <span className="text-black/30">/ {max}</span>
+                                <span className={darkMode ? "text-white/35" : "text-black/30"}>/ {max}</span>
                               </p>
                             </div>
 
-                            <div
-                              className="mt-2 h-2 w-full rounded-full overflow-hidden"
-                              style={{ background: track }}
-                            >
+                            <div className="mt-2 h-2 w-full rounded-full overflow-hidden" style={{ background: track }}>
                               <div
                                 className="h-2 rounded-full"
                                 style={{
@@ -797,12 +931,12 @@ export default function PortalDashboard() {
                         if (keysHere.length === 0) return null;
 
                         return (
-                          <div className="rounded-2xl border border-black/10 bg-white p-4">
-                            <p className="text-xs font-black tracking-[0.30em] uppercase text-black/40">
+                          <div className={["rounded-2xl border p-4", cardClass].join(" ")}>
+                            <p className={["text-xs font-black tracking-[0.30em] uppercase", labelFaint].join(" ")}>
                               {title}
                             </p>
 
-                            <div className="mt-3 divide-y divide-black/10">
+                            <div className={["mt-3 divide-y", darkMode ? "divide-white/10" : "divide-black/10"].join(" ")}>
                               {keysHere.map((k) => (
                                 <div key={k} className="first:pt-0 pt-2">
                                   <StatBar k={k} groupKey={groupKey} />
@@ -816,34 +950,34 @@ export default function PortalDashboard() {
                       return (
                         <div className="space-y-5">
                           {/* Resumen (se mantiene) */}
-                          <div className="rounded-2xl border border-black/10 bg-white p-5">
-                            <p className="text-xs font-black tracking-[0.35em] uppercase text-black/40">
+                          <div className={["rounded-2xl border p-5", cardClass].join(" ")}>
+                            <p className={["text-xs font-black tracking-[0.35em] uppercase", labelFaint].join(" ")}>
                               Resumen
                             </p>
 
                             <div className="mt-3 flex flex-wrap gap-2">
-                              <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold bg-black/5 text-black/70">
-                                🏟️ PJ: <span className="ml-1 text-black font-black">{estadisticas?.partidos_jugador ?? "—"}</span>
+                              <span className={["inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold", darkMode ? "bg-white/10 text-white/75" : "bg-black/5 text-black/70"].join(" ")}>
+                                🏟️ PJ: <span className={["ml-1 font-black", darkMode ? "text-white" : "text-black"].join(" ")}>{estadisticas?.partidos_jugador ?? "—"}</span>
                               </span>
 
-                              <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold bg-black/5 text-black/70">
-                                ⚽ G: <span className="ml-1 text-black font-black">{estadisticas?.goles ?? "—"}</span>
+                              <span className={["inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold", darkMode ? "bg-white/10 text-white/75" : "bg-black/5 text-black/70"].join(" ")}>
+                                ⚽ G: <span className={["ml-1 font-black", darkMode ? "text-white" : "text-black"].join(" ")}>{estadisticas?.goles ?? "—"}</span>
                               </span>
 
-                              <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold bg-black/5 text-black/70">
-                                🎯 A: <span className="ml-1 text-black font-black">{estadisticas?.asistencias ?? "—"}</span>
+                              <span className={["inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold", darkMode ? "bg-white/10 text-white/75" : "bg-black/5 text-black/70"].join(" ")}>
+                                🎯 A: <span className={["ml-1 font-black", darkMode ? "text-white" : "text-black"].join(" ")}>{estadisticas?.asistencias ?? "—"}</span>
                               </span>
 
-                              <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold bg-black/5 text-black/70">
-                                🟨: <span className="ml-1 text-black font-black">{estadisticas?.tarjetas_amarillas ?? "—"}</span>
+                              <span className={["inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold", darkMode ? "bg-white/10 text-white/75" : "bg-black/5 text-black/70"].join(" ")}>
+                                🟨: <span className={["ml-1 font-black", darkMode ? "text-white" : "text-black"].join(" ")}>{estadisticas?.tarjetas_amarillas ?? "—"}</span>
                               </span>
 
-                              <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold bg-black/5 text-black/70">
-                                🟥: <span className="ml-1 text-black font-black">{estadisticas?.tarjetas_rojas ?? "—"}</span>
+                              <span className={["inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold", darkMode ? "bg-white/10 text-white/75" : "bg-black/5 text-black/70"].join(" ")}>
+                                🟥: <span className={["ml-1 font-black", darkMode ? "text-white" : "text-black"].join(" ")}>{estadisticas?.tarjetas_rojas ?? "—"}</span>
                               </span>
 
-                              <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold bg-black/5 text-black/70">
-                                ⏱️ Min: <span className="ml-1 text-black font-black">{estadisticas?.minutos_jugados ?? "—"}</span>
+                              <span className={["inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold", darkMode ? "bg-white/10 text-white/75" : "bg-black/5 text-black/70"].join(" ")}>
+                                ⏱️ Min: <span className={["ml-1 font-black", darkMode ? "text-white" : "text-black"].join(" ")}>{estadisticas?.minutos_jugados ?? "—"}</span>
                               </span>
                             </div>
                           </div>
@@ -851,23 +985,18 @@ export default function PortalDashboard() {
                           {/* Tablero por columnas */}
                           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                             {CATEGORIES.map((c) => (
-                              <CategoryCol
-                                key={c.title}
-                                title={c.title}
-                                keys={c.keys}
-                                groupKey={c.groupKey}
-                              />
+                              <CategoryCol key={c.title} title={c.title} keys={c.keys} groupKey={c.groupKey} />
                             ))}
                           </div>
 
                           {/* Otros indicadores (si aparecen nuevas columnas en BD) */}
                           {others.length > 0 && (
-                            <div className="rounded-2xl border border-black/10 bg-white p-4">
-                              <p className="text-xs font-black tracking-[0.30em] uppercase text-black/40">
+                            <div className={["rounded-2xl border p-4", cardClass].join(" ")}>
+                              <p className={["text-xs font-black tracking-[0.30em] uppercase", labelFaint].join(" ")}>
                                 📌 Otros indicadores
                               </p>
 
-                              <div className="mt-3 divide-y divide-black/10">
+                              <div className={["mt-3 divide-y", darkMode ? "divide-white/10" : "divide-black/10"].join(" ")}>
                                 {others.map((k) => (
                                   <div key={k} className="pt-2">
                                     <StatBar k={k} groupKey="otros" />
@@ -889,8 +1018,8 @@ export default function PortalDashboard() {
                   <h3 className="text-lg font-extrabold text-[#e82d89] uppercase tracking-widest">
                     Contrato
                   </h3>
-                  <div className="rounded-2xl border border-black/10 bg-white p-5">
-                    <p className="text-sm font-semibold text-black/70">
+                  <div className={["rounded-2xl border p-5", cardClass].join(" ")}>
+                    <p className={["text-sm font-semibold", softText].join(" ")}>
                       Próximo: endpoint seguro para descargar/visualizar contrato PDF del jugador.
                     </p>
                   </div>

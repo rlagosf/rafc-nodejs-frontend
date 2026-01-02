@@ -29,7 +29,6 @@ const asList = (raw) => {
   return [];
 };
 
-// Devuelve UN solo objeto desde {item} / {data.item} / {data.items[0]} / objeto llano
 const unwrapOne = (raw) => {
   if (!raw) return null;
   if (raw.item && typeof raw.item === 'object') return raw.item;
@@ -93,6 +92,14 @@ const getEstadisticaIdFromJugador = (j) => {
   return eid;
 };
 
+// 🆕 arma dataURL para IMG
+const buildFotoDataUrl = (j) => {
+  const b64 = j?.foto_base64;
+  const mime = j?.foto_mime;
+  if (!b64 || !mime) return null;
+  return `data:${mime};base64,${b64}`;
+};
+
 /* ───────── Componente ───────── */
 export default function DetalleJugador() {
   const { rut } = useParams();
@@ -100,7 +107,6 @@ export default function DetalleJugador() {
   const location = useLocation();
   const { darkMode } = useTheme();
 
-  // 🧭 Breadcrumb: asegura "Inicio / Listar Jugadores / Detalle Jugador"
   useEffect(() => {
     const currentPath = location.pathname + location.search;
     const base = Array.isArray(location.state?.breadcrumb)
@@ -119,7 +125,6 @@ export default function DetalleJugador() {
 
   useMobileAutoScrollTop();
 
-
   const css = {
     fondo: darkMode ? 'bg-[#111827] text-white' : 'bg-white text-[#1d0b0b]',
     tarjeta: darkMode ? 'bg-[#1f2937] border border-gray-700 text-white'
@@ -132,6 +137,9 @@ export default function DetalleJugador() {
   const [jugador, setJugador] = useState(null);
   const [estadisticas, setEstadisticas] = useState(null);
   const [statsId, setStatsId] = useState(null);
+
+  // 🆕 foto
+  const [fotoDataUrl, setFotoDataUrl] = useState(null);
 
   const [posiciones, setPosiciones] = useState([]);
   const [categorias, setCategorias] = useState([]);
@@ -186,6 +194,9 @@ export default function DetalleJugador() {
           navigate('/admin/listar-jugadores', { replace: true });
           return;
         }
+
+        // 🆕 setear foto data url
+        setFotoDataUrl(buildFotoDataUrl(j));
 
         // 2) Stats por RUT (by-rut), fallback por estadistica_id
         let est = {};
@@ -292,7 +303,7 @@ export default function DetalleJugador() {
           fecha_nacimiento: ymd || '',
           estado_id: j?.estado_id ?? null,
           sucursal_id: j?.sucursal_id ?? null,
-          estadistica_id: estId ?? getEstadisticaIdFromJugador(j) ?? null, // solo informativo
+          estadistica_id: estId ?? getEstadisticaIdFromJugador(j) ?? null,
         });
       } catch (error) {
         if (abort.signal.aborted) return;
@@ -333,7 +344,6 @@ export default function DetalleJugador() {
     return String(fecha);
   };
 
-  // ✅ ÚNICO useMemo para secciones
   const secciones = useMemo(() => {
     if (!estadisticas) return {};
     return {
@@ -396,18 +406,19 @@ export default function DetalleJugador() {
     setIsLoading(true);
 
     try {
-      // Whitelist de claves aceptadas por el backend
       const ALLOWED = new Set([
         'nombre_jugador','edad','email','telefono','peso','estatura',
         'talla_polera','talla_short','nombre_apoderado','telefono_apoderado',
         'fecha_nacimiento','posicion_id','categoria_id','establec_educ_id',
         'prevision_medica_id','estado_id','sucursal_id'
       ]);
+
       const raw = { ...formData };
       const numeric = (v) => v === '' || v == null ? null : Number(v);
       const payload = {};
+
       for (const [k, v] of Object.entries(raw)) {
-        if (!ALLOWED.has(k)) continue; // fuera id/estadistica_id/otros
+        if (!ALLOWED.has(k)) continue;
         if (['edad','peso','estatura','posicion_id','categoria_id','establec_educ_id','prevision_medica_id','estado_id','sucursal_id'].includes(k)) {
           payload[k] = numeric(v);
         } else if (k === 'fecha_nacimiento') {
@@ -450,13 +461,24 @@ export default function DetalleJugador() {
 
   return (
     <div className={`${css.fondo} min-h-[calc(100vh-100px)] relative`}>
-      {/* El layout /admin pinta: Inicio / Listar Jugadores / Detalle Jugador */}
       <div className="px-2 sm:px-4 pt-4 pb-16 font-realacademy">
         {/* Cabecera */}
         <div className="text-center mb-8">
-          <div className="w-40 h-40 mx-auto rounded-full bg-gray-300 flex items-center justify-center text-6xl dark:bg-gray-700">
-            👤
+          {/* ✅ FOTO REAL */}
+          <div className="w-40 h-40 mx-auto rounded-full overflow-hidden bg-gray-300 flex items-center justify-center text-6xl dark:bg-gray-700 border border-black/10 dark:border-white/10">
+            {fotoDataUrl ? (
+              <img
+                src={fotoDataUrl}
+                alt={`Foto de ${jugador.nombre_jugador}`}
+                className="w-full h-full object-cover"
+                loading="lazy"
+                onError={() => setFotoDataUrl(null)}
+              />
+            ) : (
+              <span aria-hidden>👤</span>
+            )}
           </div>
+
           <h1 className="text-3xl font-extrabold mt-4">{jugador.nombre_jugador}</h1>
           <p className="text-sm text-gray-500">
             {jugador.posicion?.nombre || '-'} | {jugador.edad ?? '-'} años
@@ -486,13 +508,13 @@ export default function DetalleJugador() {
               ['Talla Short', 'talla_short'],
               ['Nombre Apoderado', 'nombre_apoderado'],
               ['Teléfono Apoderado', 'telefono_apoderado'],
-              ['Posición', 'posicion_id'],     // 👈 añadido
-              ['Categoría', 'categoria_id'],   // 👈 añadido
+              ['Posición', 'posicion_id'],
+              ['Categoría', 'categoria_id'],
               ['Establecimiento', 'establec_educ_id'],
               ['Previsión Médica', 'prevision_medica_id'],
               ['Estado', 'estado_id'],
               ['Sucursal', 'sucursal_id'],
-              ['Estadística ID', 'estadistica_id'], // solo visual
+              ['Estadística ID', 'estadistica_id'],
             ].map(([label, key]) => (
               <div key={key}>
                 <span className="font-semibold text-sm">{label}:</span>
@@ -513,7 +535,7 @@ export default function DetalleJugador() {
                     ? formatearFechaLocal(jugador.fecha_nacimiento)
                   : key === 'estadistica_id'
                     ? (statsId ?? jugador.estadistica_id ?? '-')
-                  : (jugador[key] ?? '-')}
+                  : (jugador[key] ?? '-') }
                 </span>
               </div>
             ))}
@@ -664,7 +686,6 @@ export default function DetalleJugador() {
                 </select>
               </div>
 
-              {/* Estado */}
               <div>
                 <label className="block text-sm font-semibold mb-1">Estado</label>
                 <select
@@ -680,7 +701,6 @@ export default function DetalleJugador() {
                 </select>
               </div>
 
-              {/* Sucursal */}
               <div>
                 <label className="block text-sm font-semibold mb-1">Sucursal</label>
                 <select
@@ -696,7 +716,6 @@ export default function DetalleJugador() {
                 </select>
               </div>
 
-              {/* Estadística ID (solo lectura) */}
               <div>
                 <label className="block text-sm font-semibold mb-1">Estadística ID</label>
                 <input

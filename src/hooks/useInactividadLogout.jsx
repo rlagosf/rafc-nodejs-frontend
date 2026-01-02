@@ -15,13 +15,10 @@ export default function useInactividadLogout({
   const timerRef = useRef(null);
   const bcRef = useRef(null);
 
-  const attachedRef = useRef(false);      // ✅ solo boolean
-  const onVisRef = useRef(null);          // ✅ guarda handler visibilitychange
-
   const lastSetRef = useRef(0);
 
   const markActivity = (ts = Date.now()) => {
-    if (ts - lastSetRef.current < 1000) return; // debounce 1s
+    if (ts - lastSetRef.current < 800) return; // debounce suave
     lastSetRef.current = ts;
     try {
       localStorage.setItem(storageKey, String(ts));
@@ -66,43 +63,44 @@ export default function useInactividadLogout({
   useEffect(() => {
     if (getToken()) markActivity();
 
-    // ✅ si hay requests, cuenta como actividad
+    // ✅ si hay requests, cuenta como actividad (solo si hay token)
     const interceptorId = api.interceptors.request.use((cfg) => {
-      markActivity();
+      if (getToken()) markActivity();
       return cfg;
     });
 
-    // ✅ actividad real del usuario
     const onAnyActivity = () => markActivity();
-    const opts = { passive: true };
-    const events = [
-      "mousemove",
-      "mousedown",
-      "keydown",
-      "scroll",
-      "touchstart",
-      "click",
-      "wheel",
-    ];
 
-    if (!attachedRef.current) {
-      events.forEach((ev) => window.addEventListener(ev, onAnyActivity, opts));
+    // ✅ eventos base (document es más confiable que window)
+    const optsPassive = { passive: true };
+    const doc = document;
 
-      const onVis = () => {
-        if (!document.hidden) markActivity();
-      };
-      onVisRef.current = onVis;
-      document.addEventListener("visibilitychange", onVis);
+    // Eventos que sí “se sienten” como uso real
+    doc.addEventListener("click", onAnyActivity, optsPassive);
+    doc.addEventListener("keydown", onAnyActivity, optsPassive);
+    doc.addEventListener("pointerdown", onAnyActivity, optsPassive);
+    doc.addEventListener("pointermove", onAnyActivity, optsPassive);
+    doc.addEventListener("touchstart", onAnyActivity, optsPassive);
+    doc.addEventListener("touchmove", onAnyActivity, optsPassive);
+    window.addEventListener("mousemove", onAnyActivity, optsPassive);
+    window.addEventListener("wheel", onAnyActivity, optsPassive);
 
-      attachedRef.current = true;
-    }
+    // ⭐ CLAVE: scroll en CAPTURE para atrapar scroll de contenedores
+    const onScrollCapture = () => markActivity();
+    doc.addEventListener("scroll", onScrollCapture, true);
 
-    // ✅ sincroniza logout entre pestañas del MISMO módulo
+    // Focus/visibility: volver a pestaña cuenta como actividad
+    const onVis = () => {
+      if (!doc.hidden) markActivity();
+    };
+    doc.addEventListener("visibilitychange", onVis);
+
+    const onFocus = () => markActivity();
+    window.addEventListener("focus", onFocus);
+
+    // ✅ sincroniza logout entre pestañas
     const onStorage = (e) => {
       if (e.key === forceKey && e.newValue) doLogoutEverywhere();
-      if (e.key === storageKey && e.newValue) {
-        // opcional: no hacer nada; solo existe para “wake up”
-      }
     };
     window.addEventListener("storage", onStorage);
 
@@ -124,12 +122,20 @@ export default function useInactividadLogout({
       try { api.interceptors.request.eject(interceptorId); } catch {}
       try { window.removeEventListener("storage", onStorage); } catch {}
 
-      events.forEach((ev) => window.removeEventListener(ev, onAnyActivity, opts));
       try {
-        if (onVisRef.current) {
-          document.removeEventListener("visibilitychange", onVisRef.current);
-        }
+        doc.removeEventListener("click", onAnyActivity, optsPassive);
+        doc.removeEventListener("keydown", onAnyActivity, optsPassive);
+        doc.removeEventListener("pointerdown", onAnyActivity, optsPassive);
+        doc.removeEventListener("pointermove", onAnyActivity, optsPassive);
+        doc.removeEventListener("touchstart", onAnyActivity, optsPassive);
+        doc.removeEventListener("touchmove", onAnyActivity, optsPassive);
+        doc.removeEventListener("scroll", onScrollCapture, true);
+        doc.removeEventListener("visibilitychange", onVis);
       } catch {}
+
+      try { window.removeEventListener("mousemove", onAnyActivity, optsPassive); } catch {}
+      try { window.removeEventListener("wheel", onAnyActivity, optsPassive); } catch {}
+      try { window.removeEventListener("focus", onFocus); } catch {}
 
       if (bcRef.current) {
         try { bcRef.current.close(); } catch {}

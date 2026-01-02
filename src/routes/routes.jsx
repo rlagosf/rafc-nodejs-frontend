@@ -55,6 +55,8 @@ const DetalleEstadistica = lazy(() => import("../pages/admin/detalleEstadistica"
 const PortalHome = lazy(() => import("../pages/apoderado/portalHome"));
 const PortalDashboard = lazy(() => import("../pages/apoderado/portalDashboard"));
 const CambiarClaveApoderado = lazy(() => import("../pages/apoderado/cambiarClave"));
+const ConfiguracionApoderado = lazy(() => import("../pages/apoderado/configuracionApoderado"));
+
 
 function Home() {
   return (
@@ -78,14 +80,25 @@ function PublicShell() {
   );
 }
 
-function PrivateApp({ children, redirectTo }) {
+function PrivateApp({
+  children,
+  redirectTo,
+  timeoutMs = 5 * 60 * 1000,
+  pingMs = 15 * 1000,
+  storageKey,
+  forceKey,
+}) {
   useInactividadLogout({
-    timeoutMs: 5 * 60 * 1000,
-    pingMs: 15 * 1000,
-    redirectTo, // ✅ /login o /login-apoderado
+    timeoutMs,
+    pingMs,
+    redirectTo,
+    storageKey,
+    forceKey,
   });
+
   return children;
 }
+
 
 export const routes = [
   { path: "/", element: <PublicShell /> },
@@ -98,7 +111,12 @@ export const routes = [
     path: "/admin",
     element: (
       <ProtectedRoute mode="admin" roleIn={[1, 2]}>
-        <PrivateApp redirectTo="/login">
+        <PrivateApp
+          redirectTo="/login"
+          storageKey="rafc_lastActivity_admin"
+          forceKey="rafc_forceLogout_admin"
+          timeoutMs={5 * 60 * 1000}
+        >
           <DashboardLayout />
         </PrivateApp>
       </ProtectedRoute>
@@ -146,7 +164,7 @@ export const routes = [
           redirectTo="/login-apoderado"
           storageKey="rafc_lastActivity_apoderado"
           forceKey="rafc_forceLogout_apoderado"
-          timeoutMs={15 * 60 * 1000} // por ejemplo 15 min para apoderados (o 30)
+          timeoutMs={5 * 60 * 1000} // por ejemplo 15 min para apoderados (o 30)
         >
           <PortalDashboard />
         </PrivateApp>
@@ -154,6 +172,23 @@ export const routes = [
       </ProtectedRoute>
     ),
   },
+  {
+    path: "/portal-apoderado/configuracion",
+    element: (
+      <ProtectedRoute mode="apoderado">
+        <PrivateApp
+          redirectTo="/login-apoderado"
+          storageKey="rafc_lastActivity_apoderado"
+          forceKey="rafc_forceLogout_apoderado"
+          timeoutMs={5 * 60 * 1000}
+        >
+          <ConfiguracionApoderado />
+        </PrivateApp>
+      </ProtectedRoute>
+    ),
+  },
+
+
   {
     path: "/portal-apoderado/cambiar-clave",
     element: (
