@@ -16,11 +16,12 @@ import {
   CalendarPlus,
   History,
   Banknote,
-  PieChart,       // ✅ NUEVO icono torta
+  PieChart,       // ✅ icono torta
   UserCog,
   Settings,
   CalendarDays,
-  Stethoscope
+  Stethoscope,
+  Newspaper,      // ✅ NUEVO icono noticias
 } from 'lucide-react';
 import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
 
@@ -40,11 +41,13 @@ const segToLabel = (seg) => {
     'ver-convocaciones-historicas': 'Histórico Convocatorias',
     'gestionar-pagos': 'Gestionar pagos',
     'registrar-pago': 'Registrar pago',
-    'powerbi-finanzas': 'POWER BI FINANCIERO', // ✅ NUEVO label breadcrumb por URL
+    'powerbi-finanzas': 'POWER BI FINANCIERO', // ✅ label breadcrumb por URL (si la usas)
+    'power-bi': 'POWER BI FINANCIERO',         // ✅ por si tu ruta real es /admin/power-bi
     'crear-usuario': 'Crear Usuario',
     'configuracion': 'Configuración',
     'agenda': 'Agenda',
     'seguimiento-medico': 'Seguimiento médico',
+    'noticias': 'Registro Noticias',           // ✅ NUEVO breadcrumb
   };
   return map[seg] || (seg?.charAt(0).toUpperCase() + seg.slice(1).replaceAll('-', ' '));
 };
@@ -87,8 +90,11 @@ const cards = [
   { to: '/admin/ver-convocaciones-historicas', label: 'Historial Convocatorias',             roles: [1, 2], Icon: History },
   { to: '/admin/gestionar-pagos',              label: 'Gestionar pagos',                     roles: [1],    Icon: Banknote },
 
-  // ✅ REEMPLAZO: Estados de Cuenta -> POWER BI FINANCIERO
+  // ✅ POWER BI
   { to: '/admin/power-bi',                     label: 'POWER BI FINANCIERO',                 roles: [1],    Icon: PieChart },
+
+  // ✅ NUEVO: Noticias
+  { to: '/admin/noticias',                     label: 'Registro Noticias',                   roles: [1],    Icon: Newspaper },
 
   { to: '/admin/crear-usuario',                label: 'Crear Usuario',                       roles: [1],    Icon: UserCog },
   { to: '/admin/configuracion',                label: 'Configuración',                       roles: [1],    Icon: Settings },

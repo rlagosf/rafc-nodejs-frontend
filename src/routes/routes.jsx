@@ -27,9 +27,7 @@ const Agenda = lazy(() => import("../pages/admin/agenda"));
 
 const ListarPagos = lazy(() => import("../pages/admin/listarPagos"));
 const Pagos = lazy(() => import("../pages/admin/pagos"));
-const JugadoresPendientes = lazy(() =>
-  import("../pages/admin/modulo-financiero/jugadoresPendientes")
-);
+const JugadoresPendientes = lazy(() => import("../pages/admin/modulo-financiero/jugadoresPendientes"));
 const PowerbiFinanzas = lazy(() => import("../pages/admin/powerbiFinanzas"));
 const PagosCentralizados = lazy(() => import("../pages/admin/modulo-financiero/pagosCentralizados"));
 const EstadosCuenta = lazy(() => import("../pages/admin/estadosCuenta"));
@@ -56,6 +54,9 @@ const PortalHome = lazy(() => import("../pages/apoderado/portalHome"));
 const PortalDashboard = lazy(() => import("../pages/apoderado/portalDashboard"));
 const CambiarClaveApoderado = lazy(() => import("../pages/apoderado/cambiarClave"));
 const ConfiguracionApoderado = lazy(() => import("../pages/apoderado/configuracionApoderado"));
+
+/* -------------------- Noticias   -------------------- */
+const RegistroNoticias = lazy(() => import("../pages/admin/registroNoticias"));
 
 
 function Home() {
@@ -151,6 +152,8 @@ export const routes = [
       { path: "ver-convocaciones-historicas", element: <VerConvocacionHistorica /> },
       { path: "registrar-estadisticas", element: <RegistrarEstadisticas /> },
       { path: "detalle-estadistica/:rut", element: <DetalleEstadistica /> },
+
+      { path: "noticias", element: <RegistroNoticias /> },
     ],
   },
 
