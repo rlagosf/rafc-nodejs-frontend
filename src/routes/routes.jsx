@@ -12,6 +12,7 @@ const Servicios = lazy(() => import("../pages/servicios"));
 const Ubicacion = lazy(() => import("../pages/ubicacion"));
 const Nosotros = lazy(() => import("../pages/nosotros"));
 const Galeria = lazy(() => import("../pages/galeria"));
+const Noticias = lazy(() => import("../pages/noticias"));
 
 /* -------------------- Login -------------------- */
 const Login = lazy(() => import("../pages/admin/login"));
@@ -64,6 +65,7 @@ function Home() {
     <>
       <section id="inicio" className="scroll-mt-16"><Landing /></section>
       <section id="nosotros" className="scroll-mt-16"><Nosotros /></section>
+      <section id="noticias" className="scroll-mt-16"><Noticias /></section>
       <section id="servicios" className="scroll-mt-16"><Servicios /></section>
       <section id="ubicacion" className="scroll-mt-16"><Ubicacion /></section>
       <section id="contacto" className="scroll-mt-16"><Contacto /></section>
