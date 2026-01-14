@@ -22,6 +22,7 @@ import {
   CalendarDays,
   Stethoscope,
   Newspaper,      // ✅ NUEVO icono noticias
+  CreditCard
 } from 'lucide-react';
 import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
 
@@ -40,7 +41,7 @@ const segToLabel = (seg) => {
     'convocatorias': 'Convocatorias',
     'ver-convocaciones-historicas': 'Histórico Convocatorias',
     'gestionar-pagos': 'Gestionar pagos',
-    'registrar-pago': 'Registrar pago',
+    'registrar-pagos': 'Ingresar pagos',
     'powerbi-finanzas': 'POWER BI FINANCIERO', // ✅ label breadcrumb por URL (si la usas)
     'power-bi': 'POWER BI FINANCIERO',         // ✅ por si tu ruta real es /admin/power-bi
     'crear-usuario': 'Crear Usuario',
@@ -88,7 +89,9 @@ const cards = [
   { to: '/admin/estadisticas',                 label: 'Estadísticas Globales',               roles: [1, 2], Icon: BarChart3 },
   { to: '/admin/convocatorias',                label: 'Crear Convocatorias',                 roles: [1],    Icon: CalendarPlus },
   { to: '/admin/ver-convocaciones-historicas', label: 'Historial Convocatorias',             roles: [1, 2], Icon: History },
-  { to: '/admin/gestionar-pagos',              label: 'Gestionar pagos',                     roles: [1],    Icon: Banknote },
+  { to: '/admin/gestionar-pagos',              label: 'Pagos centralizados',                 roles: [1],    Icon: Banknote },
+  { to: '/admin/registrar-pago',               label: 'Ingresar pagos',                      roles: [1],    Icon: CreditCard },
+
 
   // ✅ POWER BI
   { to: '/admin/power-bi',                     label: 'POWER BI FINANCIERO',                 roles: [1],    Icon: PieChart },
@@ -100,12 +103,7 @@ const cards = [
   { to: '/admin/configuracion',                label: 'Configuración',                       roles: [1],    Icon: Settings },
   { to: '/admin/agenda',                       label: 'Agenda de eventos',                   roles: [1, 2], Icon: CalendarDays },
   {
-    to: '/admin/seguimiento-medico',
-    label: 'Seguimiento médico (próximamente)',
-    roles: [1, 2],
-    Icon: Stethoscope,
-    disabled: true,
-  },
+    to: '/admin/seguimiento-medico',           label: 'Seguimiento médico (próximamente)',   roles: [1, 2], Icon: Stethoscope, disabled: true,},
 ];
 
 /* ───────────────── Component ───────────────── */

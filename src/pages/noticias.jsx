@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { apiPublic as api } from "../services/api";
 import { X } from "lucide-react";
+import { linkifyText } from "../components/linkify";
 
 const BASE_NOTICIAS = "/noticias";
 
@@ -48,14 +49,7 @@ const fromAnyToHuman = (value) => {
   });
 };
 
-function FloatingTooltipCard({
-  item,
-  imgSrc,
-  onOpen,
-  dark = true,
-  index = 0,
-}) {
-  // Fondo tipo RAFC: oscuro, nítido, sin “leche borrosa”
+function FloatingTooltipCard({ item, imgSrc, onOpen, dark = true, index = 0 }) {
   const surface = dark
     ? "bg-white/[0.06] border-white/15 hover:border-white/25"
     : "bg-white border-gray-200";
@@ -81,7 +75,6 @@ function FloatingTooltipCard({
                 loading="lazy"
                 decoding="async"
               />
-              {/* Overlay suave para que el texto se sienta pro */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/10 to-transparent" />
             </>
           ) : (
@@ -114,7 +107,7 @@ function FloatingTooltipCard({
   );
 }
 
-function ModalNoticia({ open, onClose, item, imgSrc, dark = true }) {
+function ModalNoticia({ open, onClose, item, imgSrc, dark = true, loadingDetail = false }) {
   if (!open) return null;
 
   const shell = dark
@@ -133,12 +126,14 @@ function ModalNoticia({ open, onClose, item, imgSrc, dark = true }) {
         transition={{ duration: 0.22, ease: "easeOut" }}
         className="relative w-full max-w-3xl"
       >
-        {/* ✅ Borde degradado RAFC */}
         <div className="rounded-2xl p-[1px] bg-gradient-to-r from-[#e82d89] via-fuchsia-500 to-[#e82d89] shadow-[0_0_22px_#e82d8966]">
           <div className={`relative rounded-2xl overflow-hidden border ${shell}`}>
             <div className="p-4 sm:p-5 flex items-center justify-between">
               <div className="font-extrabold text-base sm:text-lg tracking-tight">
                 {item?.titulo || "Noticia"}
+                {loadingDetail && (
+                  <span className="ml-2 text-xs font-semibold text-white/60">· cargando…</span>
+                )}
               </div>
 
               <button
@@ -147,7 +142,6 @@ function ModalNoticia({ open, onClose, item, imgSrc, dark = true }) {
                 className="inline-flex items-center gap-2 px-3 py-2 rounded-xl font-semibold border border-white/10 hover:bg-white/10"
               >
                 <X size={16} />
-                
               </button>
             </div>
 
@@ -157,9 +151,7 @@ function ModalNoticia({ open, onClose, item, imgSrc, dark = true }) {
                   <img
                     src={imgSrc}
                     alt="imagen noticia"
-                    className={`w-full h-64 ${
-                      isPopup ? "object-contain" : "object-cover"
-                    } bg-black`}
+                    className={`w-full h-64 ${isPopup ? "object-contain" : "object-cover"} bg-black`}
                     loading={isPopup ? "eager" : "lazy"}
                     decoding="async"
                     fetchPriority={isPopup ? "high" : "auto"}
@@ -181,8 +173,8 @@ function ModalNoticia({ open, onClose, item, imgSrc, dark = true }) {
                 </div>
               ) : null}
 
-              <div className="mt-4 text-gray-200 leading-relaxed whitespace-pre-wrap">
-                {item?.contenido ? item.contenido : "— Sin contenido —"}
+              <div className="mt-4 text-gray-200 leading-relaxed">
+                {item?.contenido ? linkifyText(item.contenido) : "— Sin contenido —"}
               </div>
             </div>
           </div>
@@ -200,8 +192,11 @@ export default function Noticias() {
   const [thumbs, setThumbs] = useState({}); // id -> dataURL | null
 
   const thumbsRef = useRef({});
+  const detailsRef = useRef({}); // id -> item completo (incluye contenido)
+
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
 
   const hasItems = items.length > 0;
 
@@ -219,11 +214,8 @@ export default function Noticias() {
       }
 
       try {
-        const { data } = await api.get(
-          `${BASE_NOTICIAS}/${id}`,
-          signal ? { signal } : {}
-        );
-        const it = data?.item;
+        const { data } = await api.get(`${BASE_NOTICIAS}/${id}`, signal ? { signal } : {});
+        const it = data?.item ?? data ?? null;
 
         if (it?.imagen_base64 && it?.imagen_mime) {
           const dataUrl = `data:${it.imagen_mime};base64,${it.imagen_base64}`;
@@ -241,6 +233,41 @@ export default function Noticias() {
     [setThumbCached]
   );
 
+  const fetchDetail = useCallback(async (id, signal) => {
+    if (!id) return null;
+
+    if (detailsRef.current[id]) return detailsRef.current[id];
+
+    const { data } = await api.get(`${BASE_NOTICIAS}/${id}`, signal ? { signal } : {});
+    // Asumimos { item: {...} } (como tu admin). Fallback defensivo:
+    const it = data?.item ?? data ?? null;
+
+    if (it) detailsRef.current[id] = it;
+    return it;
+  }, []);
+
+  const openWithDetail = useCallback(
+    async (it) => {
+      if (!it?.id) return;
+
+      // abrir rápido con lo que tenemos
+      setActive(it);
+      setOpen(true);
+      setLoadingDetail(true);
+
+      const ac = new AbortController();
+      try {
+        const full = await fetchDetail(it.id, ac.signal);
+        if (full) setActive(full);
+      } catch (e) {
+        // si falla, queda con lo básico (resumen/título igual se ve)
+      } finally {
+        setLoadingDetail(false);
+      }
+    },
+    [fetchDetail]
+  );
+
   useEffect(() => {
     const ac = new AbortController();
 
@@ -252,16 +279,11 @@ export default function Noticias() {
         const popupFromApi = data?.popup ?? null;
         const cardsFromApi = Array.isArray(data?.cards) ? data.cards : [];
 
-        // ✅ backup: si backend no entrega popup, pero viene is_popup=1 en cards
         const popupFallback =
-          popupFromApi ||
-          cardsFromApi.find((x) => Number(x?.is_popup ?? 0) === 1) ||
-          null;
+          popupFromApi || cardsFromApi.find((x) => Number(x?.is_popup ?? 0) === 1) || null;
 
-        // ✅ grid: SOLO cards normales
         const gridOnly = cardsFromApi.filter((x) => Number(x?.is_popup ?? 0) !== 1);
 
-        // ✅ dedupe defensivo por id SOLO para grid
         const map = new Map();
         for (const it of gridOnly) {
           const id = Number(it?.id);
@@ -272,14 +294,24 @@ export default function Noticias() {
 
         setItems(mergedGrid);
 
-        // ✅ precargar thumbs: popup + grid
+        // precargar thumbs: popup + grid
         const idsToPreload = [popupFallback?.id, ...mergedGrid.map((x) => x?.id)].filter(Boolean);
         await Promise.allSettled(idsToPreload.map((nid) => fetchThumb(nid, ac.signal)));
 
-        // ✅ Opción 2: abrir SIEMPRE que exista popup
+        // abrir popup siempre (pero completando detalle para traer contenido)
         if (popupFallback?.id) {
           setActive(popupFallback);
           setOpen(true);
+          setLoadingDetail(true);
+
+          try {
+            const fullPopup = await fetchDetail(popupFallback.id, ac.signal);
+            if (fullPopup) setActive(fullPopup);
+          } catch {
+            // noop
+          } finally {
+            setLoadingDetail(false);
+          }
         }
       } catch (e) {
         if (isCanceled(e)) return;
@@ -290,7 +322,7 @@ export default function Noticias() {
     })();
 
     return () => ac.abort();
-  }, [fetchThumb]);
+  }, [fetchThumb, fetchDetail]);
 
   const gridItems = useMemo(() => items, [items]);
 
@@ -325,8 +357,7 @@ export default function Noticias() {
               </h2>
 
               <p className="mt-3 text-gray-200 font-medium text-sm sm:text-base leading-relaxed">
-                Lo último del club, eventos y comunicados. Aquí no se publica relleno:
-                solo{" "}
+                Lo último del club, eventos y comunicados. Aquí no se publica relleno: solo{" "}
                 <span className="font-extrabold text-white drop-shadow-[0_0_12px_#ffffff30]">
                   información que mueve la cancha
                 </span>
@@ -343,10 +374,7 @@ export default function Noticias() {
                 item={it}
                 imgSrc={thumbs[it.id] ?? null}
                 dark={dark}
-                onOpen={() => {
-                  setActive(it);
-                  setOpen(true);
-                }}
+                onOpen={() => openWithDetail(it)}
               />
             ))}
           </div>
@@ -359,6 +387,7 @@ export default function Noticias() {
         item={active}
         imgSrc={active?.id ? thumbs[active.id] ?? null : null}
         dark={dark}
+        loadingDetail={loadingDetail}
       />
     </>
   );

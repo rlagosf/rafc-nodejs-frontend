@@ -55,12 +55,7 @@ const nombreDesdeJugador = (j) =>
   );
 
 const nombreDesdeConvocado = (c) =>
-  coalesceStr(
-    c?.nombre_jugador,
-    c?.jugador_nombre,
-    c?.nombre,
-    c?.nombre_completo
-  );
+  coalesceStr(c?.nombre_jugador, c?.jugador_nombre, c?.nombre, c?.nombre_completo);
 
 /* ================= Componente ================= */
 
@@ -77,6 +72,8 @@ export default function VerConvocacionHistorica() {
   const generatingRef = useRef(false);
 
   // mapa rutNormalizado -> { nombre, fnac, edad }
+  // OJO: este endpoint (/jugadores) en tu sistema suele venir ya filtrado a ACTIVO (estado_id=1),
+  // y lo usamos como "set" de jugadores vigentes para ocultar no-activos en histórico.
   const jugadoresMapRef = useRef(new Map());
 
   /* ========= Breadcrumb ========= */
@@ -151,7 +148,7 @@ export default function VerConvocacionHistorica() {
     let cancel = false;
     (async () => {
       try {
-        const resp = await api.get('/jugadores');
+        const resp = await api.get('/jugadores'); // normalmente solo activos (estado_id=1)
         const js = toArray(resp);
 
         const map = new Map();
@@ -174,11 +171,11 @@ export default function VerConvocacionHistorica() {
           const edad =
             typeof edadRaw === 'number'
               ? edadRaw
-              : (typeof edadRaw === 'string' && edadRaw.trim())
-                ? Number(edadRaw)
-                : fnac
-                  ? calcEdad(fnac)
-                  : '';
+              : typeof edadRaw === 'string' && edadRaw.trim()
+              ? Number(edadRaw)
+              : fnac
+              ? calcEdad(fnac)
+              : '';
 
           map.set(rutKey, { nombre, fnac, edad });
         }
@@ -204,14 +201,11 @@ export default function VerConvocacionHistorica() {
     ? 'bg-[#1f2937] shadow-lg rounded-lg p-4 border border-gray-700'
     : 'bg-white shadow-md rounded-lg p-4 border border-gray-200';
 
-  const getEventoById = (id) =>
-    eventos.find((e) => Number(e.id) === Number(id)) || null;
+  const getEventoById = (id) => eventos.find((e) => Number(e.id) === Number(id)) || null;
 
-  const nombreEvento = (e) =>
-    e?.titulo ?? e?.nombre ?? `Evento #${e?.id ?? '—'}`;
+  const nombreEvento = (e) => e?.titulo ?? e?.nombre ?? `Evento #${e?.id ?? '—'}`;
 
-  const fechaEvento = (e) =>
-    String(e?.fecha_inicio ?? e?.fecha ?? '').slice(0, 10) || '—';
+  const fechaEvento = (e) => String(e?.fecha_inicio ?? e?.fecha ?? '').slice(0, 10) || '—';
 
   const ordenarConvocados = (lista) => {
     const arr = Array.isArray(lista) ? [...lista] : [];
@@ -221,6 +215,18 @@ export default function VerConvocacionHistorica() {
       return ra.localeCompare(rb);
     });
     return arr;
+  };
+
+  // ✅ Regla de negocio: para "operación" (y esta vista te interesa como operación),
+  // solo mostramos jugadores vigentes (estado_id=1).
+  // Usamos el map de /jugadores como "set" de activos.
+  const filtrarSoloActivos = (lista) => {
+    const map = jugadoresMapRef.current;
+    if (!map || map.size === 0) return Array.isArray(lista) ? lista : []; // fallback (si no cargó el map)
+    return (Array.isArray(lista) ? lista : []).filter((c) => {
+      const rutKey = normalizeRutKey(c?.jugador_rut ?? c?.rut ?? c?.rut_jugador ?? '');
+      return rutKey && map.has(rutKey);
+    });
   };
 
   const resolverDatosJugador = (c) => {
@@ -234,7 +240,7 @@ export default function VerConvocacionHistorica() {
       nombre = fromMap.nombre;
     }
 
-    let fnac =
+    const fnac =
       fromMap?.fnac ??
       c?.fecha_nacimiento ??
       c?.fechaNacimiento ??
@@ -242,7 +248,7 @@ export default function VerConvocacionHistorica() {
       c?.fecha_nac ??
       null;
 
-    let edad = fromMap?.edad ?? (fnac ? calcEdad(fnac) : '');
+    const edad = fromMap?.edad ?? (fnac ? calcEdad(fnac) : '');
 
     return {
       rut: rutKey, // rut "plano" (sin DV) → lo pasamos por formatRutWithDV
@@ -285,20 +291,12 @@ export default function VerConvocacionHistorica() {
       const gState = doc.GState({ opacity: 0.12 });
       doc.setGState(gState);
 
-      doc.addImage(
-        logo,
-        'PNG',
-        (pageW - logoW) / 2,
-        (pageH - logoH) / 2,
-        logoW,
-        logoH
-      );
+      doc.addImage(logo, 'PNG', (pageW - logoW) / 2, (pageH - logoH) / 2, logoW, logoH);
 
       // Volver al estado normal (sin opacidad)
       const gStateNormal = doc.GState({ opacity: 1 });
       doc.setGState(gStateNormal);
     }
-
 
     /* ===== Títulos ===== */
     const titulo = 'Listado de Convocados';
@@ -348,12 +346,9 @@ export default function VerConvocacionHistorica() {
         const y = pageH - 24;
         doc.setFontSize(9);
         doc.setTextColor(90, 90, 90);
-        doc.text(
-          `Real Academy FC • APP Oficial  •  Página ${data.pageNumber}`,
-          pageW / 2,
-          y,
-          { align: 'center' }
-        );
+        doc.text(`Real Academy FC • APP Oficial  •  Página ${data.pageNumber}`, pageW / 2, y, {
+          align: 'center',
+        });
       },
     });
 
@@ -388,16 +383,18 @@ export default function VerConvocacionHistorica() {
 
       const evento = getEventoById(evento_id) || { id: evento_id };
 
-      const res = await api.get(
-        `/convocatorias/evento/${evento_id}/convocatoria/${convocatoria_id}`
-      );
+      const res = await api.get(`/convocatorias/evento/${evento_id}/convocatoria/${convocatoria_id}`);
       const lista = toArray(res);
-      if (!Array.isArray(lista) || lista.length === 0) {
-        alert('Sin registros de convocatorias para esta convocatoria.');
+
+      // ✅ Solo activos
+      const listaActivos = filtrarSoloActivos(lista);
+
+      if (!Array.isArray(listaActivos) || listaActivos.length === 0) {
+        alert('No hay jugadores activos en esta convocatoria histórica.');
         return;
       }
 
-      await exportarPDFDesdeDatos(evento, lista);
+      await exportarPDFDesdeDatos(evento, listaActivos);
     } catch (err) {
       const st = err?.response?.status;
       if (st === 401 || st === 403) {
@@ -423,12 +420,13 @@ export default function VerConvocacionHistorica() {
 
       const evento = getEventoById(evento_id) || { id: evento_id };
 
-      const res = await api.get(
-        `/convocatorias/evento/${evento_id}/convocatoria/${convocatoria_id}`
-      );
+      const res = await api.get(`/convocatorias/evento/${evento_id}/convocatoria/${convocatoria_id}`);
       const lista = toArray(res);
 
-      setModal({ open: true, evento, jugadores: lista });
+      // ✅ Solo activos
+      const listaActivos = filtrarSoloActivos(lista);
+
+      setModal({ open: true, evento, jugadores: listaActivos });
     } catch (e) {
       const st = e?.response?.status;
       if (st === 401 || st === 403) {
@@ -453,9 +451,7 @@ export default function VerConvocacionHistorica() {
       <div className={tarjetaClase}>
         <div className="w-full overflow-x-auto">
           {historicos.length === 0 ? (
-            <p className="text-center text-gray-400 py-4">
-              No hay convocatorias históricas registradas.
-            </p>
+            <p className="text-center text-gray-400 py-4">No hay convocatorias históricas registradas.</p>
           ) : (
             <table className="w-full text-xs sm:text-sm table-fixed sm:table-auto">
               <thead className={`${tablaCabecera} text-[10px] sm:text-xs`}>
@@ -475,9 +471,7 @@ export default function VerConvocacionHistorica() {
                   return (
                     <tr key={h.id} className={filaHover}>
                       <td className="p-2 border text-center">{h.id}</td>
-                      <td className="p-2 border text-center">
-                        {evento ? nombreEvento(evento) : '—'}
-                      </td>
+                      <td className="p-2 border text-center">{evento ? nombreEvento(evento) : '—'}</td>
                       <td className="p-2 border text-center">#{h.convocatoria_id}</td>
                       <td className="p-2 border text-center">
                         {String(h.fecha_generacion ?? '').replace('T', ' ').slice(0, 19)}
@@ -512,13 +506,10 @@ export default function VerConvocacionHistorica() {
       {/* Modal convocados */}
       {modal.open && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50">
-          <div
-            className={`${darkMode ? 'bg-[#1f2937] text-white' : 'bg-white'
-              } w-[95%] max-w-3xl rounded-lg p-6 shadow-lg`}
-          >
+          <div className={`${darkMode ? 'bg-[#1f2937] text-white' : 'bg-white'} w-[95%] max-w-3xl rounded-lg p-6 shadow-lg`}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold">
-                Convocados — {modal.evento ? nombreEvento(modal.evento) : 'Evento'}
+                Convocados (solo activos) — {modal.evento ? nombreEvento(modal.evento) : 'Evento'}
                 {modal.evento && ` (${fechaEvento(modal.evento)})`}
               </h3>
               <button
@@ -530,9 +521,7 @@ export default function VerConvocacionHistorica() {
             </div>
 
             {modal.jugadores.length === 0 ? (
-              <p className="text-center opacity-70">
-                Sin registros de convocatorias para esta convocatoria.
-              </p>
+              <p className="text-center opacity-70">No hay jugadores activos en esta convocatoria.</p>
             ) : (
               <div className="w-full overflow-x-auto">
                 <table className="w-full text-[11px] sm:text-[12px]">
@@ -549,24 +538,13 @@ export default function VerConvocacionHistorica() {
                       const info = resolverDatosJugador(c);
                       return (
                         <tr
-                          key={
-                            c.id ??
-                            `${normalizeRutKey(
-                              c.jugador_rut ?? c.rut ?? c.rut_jugador
-                            )}-${info.fnac || ''}`
-                          }
+                          key={c.id ?? `${normalizeRutKey(c.jugador_rut ?? c.rut ?? c.rut_jugador)}-${info.fnac || ''}`}
                           className={filaHover}
                         >
-                          <td className="px-2 py-1 border text-center">
-                            {info.rut ? formatRutWithDV(info.rut) : ''}
-                          </td>
+                          <td className="px-2 py-1 border text-center">{info.rut ? formatRutWithDV(info.rut) : ''}</td>
                           <td className="px-2 py-1 border text-center">{info.nombre}</td>
-                          <td className="px-2 py-1 border text-center">
-                            {info.fnac ? String(info.fnac).slice(0, 10) : ''}
-                          </td>
-                          <td className="px-2 py-1 border text-center">
-                            {info.edad !== '' ? info.edad : ''}
-                          </td>
+                          <td className="px-2 py-1 border text-center">{info.fnac ? String(info.fnac).slice(0, 10) : ''}</td>
+                          <td className="px-2 py-1 border text-center">{info.edad !== '' ? info.edad : ''}</td>
                         </tr>
                       );
                     })}

@@ -2,19 +2,18 @@
 import jsPDF from "jspdf";
 
 /**
- * NOTA FUENTE:
- * - jsPDF NO trae "Aptos" por defecto.
- * - Si registras la fuente (Aptos-Regular.ttf / Aptos-Bold.ttf),
- *   se usará. Si no, cae a helvetica sin romper.
- *
  * Export nombrado: buildContratoPdfBlob
+ * Objetivo estético:
+ * - Márgenes EXACTOS 2cm izq/der
+ * - Título principal centrado
+ * - Subtítulos a la izquierda
+ * - Cuerpo JUSTIFICADO real (margen derecho parejo)
  */
 export async function buildContratoPdfBlob({
   texto = "",
   watermarkSrc = "/logo-en-negativo.png",
-  // Si registras Aptos, usa estos nombres:
-  bodyFont = "Aptos",       // o "helvetica"
-  bodyFontStyle = "normal", // normal
+  bodyFont = "Aptos", // si no existe, cae a helvetica
+  bodyFontStyle = "normal",
   bodyFontBoldStyle = "bold",
 } = {}) {
   const doc = new jsPDF({
@@ -26,6 +25,21 @@ export async function buildContratoPdfBlob({
 
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
+
+  /* =========================
+     Helpers: unidades / layout
+  ========================= */
+  const cmToPt = (cm) => (Number(cm) || 0) * 28.3464566929; // 1 cm en puntos
+
+  // ✅ 2cm exactos
+  const marginX = cmToPt(2);
+  const topY = cmToPt(3.2);          // inicio cuerpo (bajo el header)
+  const bottomMargin = cmToPt(3);   // pie + aire
+  const maxWidth = pageW - marginX * 2;
+
+  const fontSizeBody = 12;
+  const lineHeight = 18;     // ~1.5
+  const paraGap = 6;
 
   /* =========================
      Helpers: watermark
@@ -51,16 +65,14 @@ export async function buildContratoPdfBlob({
       doc.addImage(logo, "PNG", (pageW - size) / 2, (pageH - size) / 2, size, size);
       if (gState && doc.GState) doc.setGState(doc.GState({ opacity: 1 }));
     } catch {
-      // sin watermark si falla
+      // noop
     }
   };
 
   /* =========================
-     Helpers: fonts safe
+     Fonts safe
   ========================= */
   const safeSetFont = (name, style) => {
-    // si no existe la fuente, jsPDF puede tirar o ignorar según build;
-    // hacemos fallback “seguro”.
     try {
       doc.setFont(name, style);
     } catch {
@@ -69,23 +81,7 @@ export async function buildContratoPdfBlob({
   };
 
   /* =========================
-     Layout base
-  ========================= */
-  const marginX = 50;
-  const topY = 95;
-  const bottomMargin = 60;
-
-  const maxWidth = pageW - marginX * 2;
-
-  // tamaño solicitado
-  const fontSizeBody = 12;
-  doc.setFontSize(fontSizeBody);
-
-  // altura de línea para 12pt
-  const lineHeight = 16;
-
-  /* =========================
-     Título principal fijo
+     Título principal centrado
   ========================= */
   const MAIN_TITLE =
     "CONTRATO DE PRESTACIÓN DE SERVICIOS DE ENSEÑANZA DEPORTIVA ESPECIALIZADA EN FÚTBOL";
@@ -93,173 +89,210 @@ export async function buildContratoPdfBlob({
   const header = () => {
     drawWatermark();
 
+    // Título centrado
     safeSetFont(bodyFont, bodyFontBoldStyle);
     doc.setFontSize(12);
 
-    // Título principal centrado y en mayúsculas
     const titleLines = doc.splitTextToSize(MAIN_TITLE, maxWidth);
-    let yTitle = 50;
+    let yTitle = 55;
     for (const t of titleLines) {
-      doc.text(t, pageW / 2, yTitle, { align: "center" });
+      doc.text(String(t), pageW / 2, yTitle, { align: "center" });
       yTitle += 14;
     }
 
     // línea separadora
     doc.setDrawColor(200);
-    doc.line(marginX, 78, pageW - marginX, 78);
+    doc.setLineWidth(0.8);
+    doc.line(marginX, 84, pageW - marginX, 84);
 
-    // volver a body default
+    // ✅ MUY IMPORTANTE: volver a cuerpo NORMAL (evita “primer párrafo en negrita”)
+    safeSetFont(bodyFont, bodyFontStyle);
     doc.setFontSize(fontSizeBody);
+    doc.setTextColor(0);
   };
 
-  header();
+  /* =========================
+     Normalización
+  ========================= */
+  const cleanLine = (s) =>
+    String(s || "")
+      .replace(/\t/g, " ")
+      .replace(/\u00A0/g, " ")
+      .replace(/[ ]{2,}/g, " ")
+      .trimEnd();
+
+  const normalizeSpaces = (s) => String(s || "").replace(/\s+/g, " ").trim();
 
   /* =========================
-     Justificado (manual)
+     Detectar subtítulos (izquierda)
+     OJO: NO tratamos "1.- ..." como título, porque eso te arruinó el contrato.
+     Subtítulo = línea corta y "de encabezado" (caps) o "ALGO:"
   ========================= */
+  const isSubtitleLine = (s) => {
+    const t = String(s || "").trim();
+    if (!t) return false;
+    if (t.length > 70) return false;
 
+    // Línea tipo "PRIMERA:" "SEGUNDA:" "CLAUSULA X:"
+    if (/^[A-Za-zÁÉÍÓÚÑÜ\s]{3,40}:\s*$/.test(t)) return true;
+
+    // MAYÚSCULAS cortas (tipo "MODELO...", "COMPARECENCIA", etc.)
+    const caps = t === t.toUpperCase();
+    const wc = t.split(/\s+/).filter(Boolean).length;
+
+    // Evitar que un párrafo completo en caps sea “subtítulo”
+    if (caps && wc <= 8) return true;
+
+    return false;
+  };
+
+  const underlineText = (text, x, y) => {
+    const w = doc.getTextWidth(text);
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.7);
+    doc.line(x, y + 2, x + w, y + 2);
+  };
+
+  /* =========================
+     JUSTIFICADO REAL (manual)
+     - Justifica todas las líneas excepto la última del párrafo
+     - Respeta maxWidth => margen derecho parejo
+  ========================= */
   const measure = (txt) => doc.getTextWidth(txt);
 
   const justifyLine = (line, x, y, targetWidth) => {
-    // Divide por espacios múltiples
-    const words = line.trim().split(/\s+/).filter(Boolean);
+    const words = normalizeSpaces(line).split(" ").filter(Boolean);
     if (words.length <= 1) {
-      // una palabra → normal
-      doc.text(line.trim(), x, y);
+      doc.text(words[0] ?? "", x, y);
       return;
     }
 
-    const wordsWidth = words.reduce((acc, w) => acc + measure(w), 0);
+    const spaceW = measure(" ");
+    const wordsW = words.reduce((acc, w) => acc + measure(w), 0);
     const gaps = words.length - 1;
-    const free = targetWidth - wordsWidth;
 
-    // si no hay espacio extra (o negativo), print normal
-    if (free <= 0) {
-      doc.text(line.trim(), x, y);
+    // ancho con 1 espacio base entre palabras
+    const baseW = wordsW + spaceW * gaps;
+
+    // extra para llegar justo al margen derecho
+    const extra = targetWidth - baseW;
+
+    // si no hay extra (o se pasa), no justificamos
+    if (extra <= 0) {
+      doc.text(words.join(" "), x, y);
       return;
     }
 
-    const gapExtra = free / gaps;
+    const extraPerGap = extra / gaps;
 
     let cursor = x;
     for (let i = 0; i < words.length; i++) {
       const w = words[i];
       doc.text(w, cursor, y);
       cursor += measure(w);
-      if (i < gaps) cursor += measure(" ") + gapExtra; // espacio base + extra
+
+      if (i < gaps) cursor += spaceW + extraPerGap;
     }
   };
 
-  /* =========================
-     Detectar títulos (negrita + subrayado)
-     Heurística: línea en MAYÚSCULAS, corta, sin punto final.
-  ========================= */
-  const isHeadingLine = (s) => {
-    const t = String(s || "").trim();
-    if (!t) return false;
-    if (t.length > 60) return false;
-    if (/[.]{1,}\s*$/.test(t)) return false; // termina en punto
-    // “mayúsculas” (permitimos acentos, Ñ y espacios)
-    const onlyCaps = t === t.toUpperCase();
-    // Evitar párrafos largos en caps
-    const wordCount = t.split(/\s+/).filter(Boolean).length;
-    return onlyCaps && wordCount <= 6;
-  };
+  const renderParagraph = (textLine, x, y) => {
+    // splitTextToSize ya respeta maxWidth, pero le quitamos doble-espacios primero
+    const normalized = normalizeSpaces(String(textLine || "").replace(/\t/g, " "));
+    const wrapped = doc.splitTextToSize(normalized, maxWidth);
 
-  const underlineText = (text, x, y) => {
-    const w = measure(text);
-    // underline: una línea 1pt abajo del baseline
-    doc.setDrawColor(0);
-    doc.setLineWidth(0.6);
-    doc.line(x, y + 2, x + w, y + 2);
+    for (let i = 0; i < wrapped.length; i++) {
+      const ln = String(wrapped[i] || "");
+      const isLast = i === wrapped.length - 1;
+
+      if (!isLast) justifyLine(ln, x, y, maxWidth);
+      else doc.text(ln.trim(), x, y);
+
+      y += lineHeight;
+    }
+
+    return y;
   };
 
   /* =========================
-     Render texto largo
+     Texto: evitar título duplicado
   ========================= */
-  safeSetFont(bodyFont, bodyFontStyle);
-  doc.setFontSize(fontSizeBody);
+  let content = String(texto || "").replace(/\r\n/g, "\n");
+  const first = cleanLine(content.split("\n")[0] || "").trim();
 
-  const paragraphs = String(texto || "")
-    .replace(/\r\n/g, "\n")
-    .split("\n");
+  if (first && first.toUpperCase() === MAIN_TITLE.toUpperCase()) {
+    content = content.split("\n").slice(1).join("\n").replace(/^\s*\n+/, "");
+  }
 
-  let y = topY;
+  const lines = content.split("\n");
 
+  /* =========================
+     Paginación / footer
+  ========================= */
   const addFooter = (pageNumber) => {
-    safeSetFont(bodyFont, "normal");
+    safeSetFont(bodyFont, bodyFontStyle);
     doc.setFontSize(9);
     doc.setTextColor(90);
-    doc.text(`Real Academy FC • Página ${pageNumber}`, pageW / 2, pageH - 24, { align: "center" });
+    doc.text(`Real Academy FC • Página ${pageNumber}`, pageW / 2, pageH - 26, { align: "center" });
+
     doc.setTextColor(0);
     doc.setFontSize(fontSizeBody);
+    safeSetFont(bodyFont, bodyFontStyle);
   };
 
   const newPage = () => {
     addFooter(doc.internal.getCurrentPageInfo().pageNumber);
     doc.addPage();
     header();
-    safeSetFont(bodyFont, bodyFontStyle);
-    doc.setFontSize(fontSizeBody);
     y = topY;
   };
 
   const ensureSpace = (needed = lineHeight) => {
-    if (y + needed > pageH - bottomMargin) newPage();
+    const limit = pageH - bottomMargin;
+    if (y + needed >= limit) newPage();
   };
 
-  for (const p of paragraphs) {
-    const raw = p ?? "";
-    const line = String(raw).trimEnd();
+  /* =========================
+     Render
+  ========================= */
+  safeSetFont(bodyFont, bodyFontStyle);
+  doc.setFontSize(fontSizeBody);
+  doc.setTextColor(0);
 
-    // línea vacía → espacio entre párrafos
+  header();
+  let y = topY;
+
+  for (const raw of lines) {
+    const line = cleanLine(raw);
+
+    // línea vacía => espacio pequeño
     if (!line.trim()) {
-      y += lineHeight * 0.8;
+      y += Math.round(lineHeight * 0.55);
       ensureSpace(0);
       continue;
     }
 
-    // TÍTULO
-    if (isHeadingLine(line)) {
-      ensureSpace(lineHeight * 1.2);
+    // ✅ subtítulo alineado a la izquierda (NO justify)
+    if (isSubtitleLine(line)) {
+      ensureSpace(Math.round(lineHeight * 1.2));
 
       safeSetFont(bodyFont, bodyFontBoldStyle);
       doc.setFontSize(12);
 
-      // centrado o a la izquierda? (tú pediste títulos en negrita/subrayado, no centrado)
-      doc.text(line.trim(), marginX, y);
+      doc.text(line.trim(), marginX, y); // izquierda
       underlineText(line.trim(), marginX, y);
 
-      // volver a cuerpo
       safeSetFont(bodyFont, bodyFontStyle);
       doc.setFontSize(fontSizeBody);
 
-      y += lineHeight * 1.2;
+      y += Math.round(lineHeight * 1.15);
       continue;
     }
 
-    // PÁRRAFO normal, justificado
-    const wrapped = doc.splitTextToSize(line, maxWidth);
+    // ✅ cuerpo justificado real
+    ensureSpace(lineHeight);
+    y = renderParagraph(line, marginX, y);
 
-    for (let i = 0; i < wrapped.length; i++) {
-      ensureSpace(lineHeight);
-
-      const wline = String(wrapped[i] || "");
-      const isLastLine = i === wrapped.length - 1;
-
-      // Justificar todas excepto la última línea del párrafo
-      if (!isLastLine) {
-        justifyLine(wline, marginX, y, maxWidth);
-      } else {
-        // última línea: alineación normal izquierda
-        doc.text(wline.trim(), marginX, y);
-      }
-
-      y += lineHeight;
-    }
-
-    // espacio extra tras párrafo
-    y += lineHeight * 0.35;
+    y += paraGap;
     ensureSpace(0);
   }
 

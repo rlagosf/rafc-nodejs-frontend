@@ -1,6 +1,6 @@
 // src/pages/admin/formjugador.jsx
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../context/ThemeContext';
 import api, { getToken, clearToken } from '../../services/api';
 import IsLoading from '../../components/isLoading';
@@ -36,7 +36,7 @@ const tryGetList = async (paths) => {
     try {
       const r = await api.get(url);
       const arr = asList(r);
-      if (arr.length >= 0) return arr; // devolver aunque esté vacío
+      if (arr.length >= 0) return arr;
     } catch (e) {
       const st = e?.status ?? e?.response?.status;
       if (st === 401 || st === 403) throw e;
@@ -45,21 +45,16 @@ const tryGetList = async (paths) => {
   return [];
 };
 
-// trim a todo string
 const trimStrings = (obj) => {
   const out = {};
-  for (const [k, v] of Object.entries(obj)) {
-    out[k] = typeof v === 'string' ? v.trim() : v;
-  }
+  for (const [k, v] of Object.entries(obj)) out[k] = typeof v === 'string' ? v.trim() : v;
   return out;
 };
 
 // '' → undefined (para no mandar claves innecesarias)
 const emptyToUndef = (obj) => {
   const out = {};
-  for (const [k, v] of Object.entries(obj)) {
-    out[k] = v === '' ? undefined : v;
-  }
+  for (const [k, v] of Object.entries(obj)) out[k] = v === '' ? undefined : v;
   return out;
 };
 
@@ -74,6 +69,46 @@ const fechaEsLarga = (d = new Date()) => {
   const yyyy = d.getFullYear();
   return `${dd} de ${mm} de ${yyyy}`;
 };
+
+// ✅ blob -> base64 (SIN data:...)
+const blobToBase64 = (blob) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('No se pudo leer el PDF'));
+    reader.onload = () => {
+      const res = String(reader.result || '');
+      const idx = res.indexOf('base64,');
+      if (idx !== -1) return resolve(res.slice(idx + 'base64,'.length));
+      resolve(res);
+    };
+    reader.readAsDataURL(blob);
+  });
+
+/* ───────── Modal simple ───────── */
+function Modal({ open, title, children, onClose, darkMode }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div
+        className={`relative w-full max-w-md rounded-2xl shadow-xl p-5 ${
+          darkMode ? 'bg-[#111827] text-white' : 'bg-white text-[#1d0b0b]'
+        }`}
+      >
+        <h3 className="text-lg font-bold mb-2">{title}</h3>
+        <div className="text-sm mb-4">{children}</div>
+        <div className="flex justify-end">
+          <button
+            onClick={onClose}
+            className="bg-fuchsia-600 text-white py-2 px-4 rounded hover:bg-fuchsia-700"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function FormJugador() {
   const { darkMode } = useTheme();
@@ -116,12 +151,12 @@ export default function FormJugador() {
 
   const [mensaje, setMensaje] = useState('');
   const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(true);        // carga de catálogos
-  const [isSubmitting, setIsSubmitting] = useState(false); // envío de formulario
+  const [isLoading, setIsLoading] = useState(true);        // carga catálogos
+  const [isSubmitting, setIsSubmitting] = useState(false); // contrato + post
 
-  // 🔸 Preview contrato
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState('');
+  // ✅ Modal creado
+  const [createdOpen, setCreatedOpen] = useState(false);
+  const [createdInfo, setCreatedInfo] = useState({ nombre: '', id: null, apoderadoCredencial: false });
 
   /* ───────── Validación de token ───────── */
   useEffect(() => {
@@ -151,15 +186,7 @@ export default function FormJugador() {
       setIsLoading(true);
       setError('');
       try {
-        const [
-          _pos,
-          _cat,
-          _estados,
-          _edu,
-          _prev,
-          _suc,
-          _com
-        ] = await Promise.all([
+        const [_pos, _cat, _estados, _edu, _prev, _suc, _com] = await Promise.all([
           tryGetList(['/posiciones', '/posicion']),
           tryGetList(['/categorias', '/categoria']),
           tryGetList(['/estado', '/estados']),
@@ -171,7 +198,6 @@ export default function FormJugador() {
 
         if (!alive) return;
 
-        // Normalización mínima: {id, nombre}
         const norm = (arr, idKeys = ['id'], nameKeys = ['nombre', 'descripcion']) =>
           (Array.isArray(arr) ? arr : [])
             .map(x => {
@@ -179,10 +205,7 @@ export default function FormJugador() {
               const nameKey = nameKeys.find(k => typeof x?.[k] === 'string');
               const id = x?.[idKey];
               const nombre = x?.[nameKey];
-              return {
-                id: Number(id),
-                nombre: String(nombre ?? '').trim() || String(id ?? '').trim()
-              };
+              return { id: Number(id), nombre: String(nombre ?? '').trim() || String(id ?? '').trim() };
             })
             .filter(e => Number.isFinite(e.id));
 
@@ -209,6 +232,7 @@ export default function FormJugador() {
         if (alive) setIsLoading(false);
       }
     })();
+
     return () => { alive = false; };
   }, [navigate]);
 
@@ -240,7 +264,6 @@ export default function FormJugador() {
 
   /* ───────── Manejador de cambios ───────── */
   const handleChange = ({ target: { name, value } }) => {
-    // Sanitizadores
     const onlyInt = (v) => (/^\d*$/.test(v) ? v : formData[name]);
     const onlyPhone = (v) => (/^\+?\d*$/.test(v) ? v : formData[name]);
     const onlyNum = (v) => (/^\d*([.]\d{0,2})?$/.test(v) ? v : formData[name]);
@@ -256,38 +279,27 @@ export default function FormJugador() {
       setFormData((prev) => ({ ...prev, [name]: value, edad: edadAuto }));
       return;
     }
-
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  /* ───────── Preview contrato (Forma B: frontend PDF) ───────── */
-  const handlePreviewContrato = async () => {
-    setPreviewError('');
-
+  /* ───────── Generar contrato (PDF->base64) ───────── */
+  const generarContratoBase64 = async () => {
     const required = ['nombre_apoderado', 'rut_apoderado', 'nombre_jugador', 'rut_jugador'];
     for (const k of required) {
       if (!String(formData[k] ?? '').trim()) {
-        setPreviewError('Faltan campos obligatorios para previsualizar el contrato.');
-        return;
+        throw new Error('Faltan campos obligatorios para generar el contrato.');
       }
     }
 
     const rutApoDigits = String(formData.rut_apoderado).replace(/\D/g, '');
     const rutJugDigits = String(formData.rut_jugador).replace(/\D/g, '');
 
-    if (!/^\d{7,8}$/.test(rutApoDigits)) {
-      setPreviewError('El RUT del apoderado debe ser de 7 u 8 dígitos (sin DV).');
-      return;
-    }
-    if (!/^\d{7,8}$/.test(rutJugDigits)) {
-      setPreviewError('El RUT del jugador debe ser de 7 u 8 dígitos (sin DV).');
-      return;
-    }
+    if (!/^\d{7,8}$/.test(rutApoDigits)) throw new Error('El RUT del apoderado debe ser de 7 u 8 dígitos (sin DV).');
+    if (!/^\d{7,8}$/.test(rutJugDigits)) throw new Error('El RUT del jugador debe ser de 7 u 8 dígitos (sin DV).');
 
     const comunaNombre =
       comunas.find((c) => String(c.id) === String(formData.comuna_id))?.nombre || '';
 
-    // placeholders del contrato (se rellenan con string)
     const data = {
       fecha_contrato: fechaEsLarga(new Date()),
       nombre_apoderado: String(formData.nombre_apoderado).trim(),
@@ -295,71 +307,64 @@ export default function FormJugador() {
       nombre_jugador: String(formData.nombre_jugador).trim(),
       rut_jugador: formatRutWithDV(rutJugDigits),
       fecha_nacimiento: formData.fecha_nacimiento ? String(formData.fecha_nacimiento) : '',
-      // el contrato usa <<dirección>> (con tilde); el fill soporta ambos
       'dirección': formData.direccion ? String(formData.direccion).trim() : '',
       comuna_id: comunaNombre || '',
     };
 
-    try {
-      setPreviewLoading(true);
+    const textoFinal = fillContratoTemplate(CONTRATO_TEMPLATE, data);
 
-      const textoFinal = fillContratoTemplate(CONTRATO_TEMPLATE, data);
+    const blob = await buildContratoPdfBlob({
+      titulo: 'CONTRATO DE PRESTACIÓN DE SERVICIOS',
+      subtitulo: `${data.nombre_jugador} • ${data.rut_jugador}`,
+      texto: textoFinal,
+    });
 
-      const blob = await buildContratoPdfBlob({
-        titulo: 'CONTRATO DE PRESTACIÓN DE SERVICIOS',
-        subtitulo: `${data.nombre_jugador} • ${data.rut_jugador}`,
-        texto: textoFinal,
-      });
-
-      const url = URL.createObjectURL(blob);
-      const win = window.open(url, '_blank', 'noopener,noreferrer');
-      if (!win) {
-        const a = document.createElement('a');
-        a.href = url;
-        a.target = '_blank';
-        a.rel = 'noopener';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-      }
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch (e) {
-      console.error(e);
-      setPreviewError('No se pudo generar el contrato en PDF.');
-    } finally {
-      setPreviewLoading(false);
-    }
+    const base64 = await blobToBase64(blob);
+    if (!base64 || base64.length < 50) throw new Error('El contrato se generó vacío o inválido.');
+    return base64;
   };
 
-  /* ───────── Enviar jugador ───────── */
+  /* ───────── Enviar jugador (Guardar único) ───────── */
   const enviarJugador = async (e) => {
     e.preventDefault();
     setMensaje('');
     setError('');
 
-    // Valida suave (sólo lo imprescindible)
+    // Validaciones suaves (lo imprescindible)
     const edadNum = Number(formData.edad || '0');
     if (formData.edad && (edadNum < 5 || edadNum > 100)) {
       return setError('La edad debe estar entre 5 y 100 años si la indicas');
     }
 
-    // acepta +569..., o 9–11 dígitos sin +
     if (formData.telefono) {
       const okTel = /^\+\d{9,15}$/.test(formData.telefono) || /^\d{9,11}$/.test(formData.telefono);
       if (!okTel) return setError('Teléfono inválido: usa +569... o 9–11 dígitos.');
     }
 
-    if (formData.rut_apoderado && !/^\d{7,8}$/.test(formData.rut_apoderado)) {
+    // ✅ Regla mínima coherente con flujo:
+    // Si mandas rut_apoderado, manda también nombre_apoderado (si no, contrato/identidad queda a medias)
+    const rutApoDigits = String(formData.rut_apoderado || '').replace(/\D/g, '');
+    const hasRutApo = rutApoDigits.length > 0;
+
+    if (hasRutApo && !/^\d{7,8}$/.test(rutApoDigits)) {
       return setError('El RUT del apoderado debe ser de 7 u 8 dígitos (sin DV).');
     }
 
-    if ([formData.posicion_id, formData.categoria_id, formData.estado_id].some((v) => !v))
+    if (hasRutApo && !String(formData.nombre_apoderado || '').trim()) {
+      return setError('Si ingresas RUT de apoderado, debes ingresar también el nombre del apoderado.');
+    }
+
+    if ([formData.posicion_id, formData.categoria_id, formData.estado_id].some((v) => !v)) {
       return setError('Debes seleccionar posición, categoría y estado');
+    }
 
     try {
       setIsSubmitting(true);
 
-      // Limpieza previa
+      // 1) Generar contrato (tal cual lo tenías)
+      const contratoBase64 = await generarContratoBase64();
+
+      // 2) Preparar payload + incluir contrato
       const cleaned = trimStrings(formData);
       const comunaId = cleaned.comuna_id ? Number(cleaned.comuna_id) : undefined;
 
@@ -376,14 +381,34 @@ export default function FormJugador() {
         sucursal_id: cleaned.sucursal_id ? Number(cleaned.sucursal_id) : undefined,
         direccion: cleaned.direccion ? String(cleaned.direccion) : undefined,
         comuna_id: Number.isFinite(comunaId) && comunaId > 0 ? comunaId : undefined,
-        // fecha_nacimiento: llega como yyyy-mm-dd del input date → backend ya lo coerciona
+
+        // ✅ contrato a BD
+        contrato_prestacion: contratoBase64,
+        contrato_prestacion_mime: 'application/pdf',
       });
 
-      console.debug('POST /jugadores payload →', payload);
-      const res = await api.post('/jugadores', payload);
+      console.debug('POST /jugadores payload →', { ...payload, contrato_prestacion: '(base64 oculto)' });
 
+      // 3) Crear jugador (backend: aquí se asegura credencial apoderado si viene rut_apoderado)
+      const res = await api.post('/jugadores', payload);
       const body = res?.data || {};
-      setMensaje(`✅ Jugador registrado: ${body?.nombre_jugador || cleaned.nombre_jugador || (body?.id ? `ID ${body.id}` : 'OK')}`);
+
+      const nombreOk = body?.nombre_jugador || cleaned.nombre_jugador || 'Jugador';
+      const idOk = body?.id ?? null;
+
+      // ✅ Indicador: si mandamos rut_apoderado válido, asumimos que backend aseguró credencial (no inventamos password, solo el “hecho” del flujo)
+      const apoderadoCredencial = hasRutApo && /^\d{7,8}$/.test(rutApoDigits);
+
+      setMensaje(
+        `✅ Jugador registrado: ${nombreOk}${idOk ? ` (ID ${idOk})` : ''}` +
+        (apoderadoCredencial ? ' • Apoderado habilitado para portal (credencial temporal) ✅' : '')
+      );
+
+      // 4) Modal "jugador creado"
+      setCreatedInfo({ nombre: nombreOk, id: idOk, apoderadoCredencial });
+      setCreatedOpen(true);
+
+      // Limpia form
       setFormData({
         nombre_jugador: '',
         rut_jugador: '',
@@ -409,28 +434,21 @@ export default function FormJugador() {
         sucursal_id: ''
       });
     } catch (err) {
-      // Soporta error normalizado (api.js) y crudo (axios)
       const st = err?.status ?? err?.response?.status ?? 0;
       const data = err?.data ?? err?.response?.data ?? null;
       const text = err?.request?.responseText;
-      const msg = data?.message ?? err?.message ?? (text ? String(text).slice(0, 300) : 'Error');
-      const field = data?.field;
-      const detail = data?.detail ?? data?.sqlMessage ?? data?.sql;
+      const msg =
+        data?.message ??
+        err?.message ??
+        (text ? String(text).slice(0, 300) : 'Error');
 
       if (st === 401 || st === 403) {
         clearToken();
         return navigate('/login', { replace: true });
       }
 
-      if (!data && st === 500) {
-        setError('❌ Error 500 sin cuerpo de respuesta (revisar logs del backend).');
-      } else if (field) {
-        setError(`${msg} (campo: ${field})`);
-      } else {
-        setError(msg);
-      }
-
-      console.warn('❌ Backend /jugadores error (raw):', { st, data, detail, text, err });
+      setError(String(msg || '❌ No se pudo guardar el jugador'));
+      console.warn('❌ guardar jugador error:', { st, data, text, err });
     } finally {
       setIsSubmitting(false);
     }
@@ -448,11 +466,8 @@ export default function FormJugador() {
 
   if (isLoading) return <IsLoading />;
 
-  /* ───────── Render ───────── */
   return (
     <div className={`${c.fondo} px-4 pt-4 pb-16 font-realacademy`}>
-      {/* Breadcrumb eliminado (lo maneja el layout) */}
-
       <h2 className="text-2xl font-bold mb-4 text-center">Registrar Jugador</h2>
 
       <div className={`${c.tarjeta} shadow-lg rounded-2xl p-4 sm:p-6 w-full max-w-full md:max-w-2xl mx-auto`}>
@@ -463,7 +478,6 @@ export default function FormJugador() {
         )}
 
         <form onSubmit={enviarJugador} className="grid md:grid-cols-1 lg:grid-cols-1 gap-4 text-sm">
-          {/* Inputs simples + Comuna justo después de Dirección */}
           {(() => {
             const fields = [
               ['nombre_jugador', 'Nombre', true],
@@ -503,7 +517,6 @@ export default function FormJugador() {
               <>
                 {before.map(renderInput)}
 
-                {/* ✅ Comuna inmediatamente después de Dirección */}
                 <select
                   name="comuna_id"
                   value={formData.comuna_id ?? ''}
@@ -523,7 +536,6 @@ export default function FormJugador() {
             );
           })()}
 
-          {/* Selects */}
           <select
             name="posicion_id"
             value={formData.posicion_id}
@@ -545,8 +557,8 @@ export default function FormJugador() {
             className={`${c.input} p-2 rounded`}
           >
             <option value="">Categoría</option>
-            {categorias.map((c) => (
-              <option key={c.id} value={c.id}>{c.nombre}</option>
+            {categorias.map((cc) => (
+              <option key={cc.id} value={cc.id}>{cc.nombre}</option>
             ))}
           </select>
 
@@ -587,7 +599,6 @@ export default function FormJugador() {
             ))}
           </select>
 
-          {/* Sucursal */}
           <select
             name="sucursal_id"
             value={formData.sucursal_id}
@@ -600,7 +611,6 @@ export default function FormJugador() {
             ))}
           </select>
 
-          {/* Observaciones */}
           <textarea
             name="observaciones"
             value={formData.observaciones}
@@ -609,34 +619,49 @@ export default function FormJugador() {
             className={`${c.input} col-span-full p-2 rounded h-24 resize-none`}
           />
 
-          {previewError && (
-            <div className="col-span-full mb-2 p-3 rounded border border-red-400 text-red-600 bg-red-50">
-              {previewError}
-            </div>
-          )}
-
+          {/* ✅ Un solo botón Guardar (contrato + jugador) */}
           <div className="col-span-full flex gap-3">
-            <button
-              type="button"
-              onClick={handlePreviewContrato}
-              disabled={previewLoading}
-              className={`${previewLoading ? 'opacity-60 cursor-not-allowed' : ''} bg-fuchsia-600 text-white py-2 px-4 rounded hover:bg-fuchsia-700`}
-            >
-              {previewLoading ? 'Generando contrato…' : 'Previsualizar contrato'}
-            </button>
-
             <button
               type="submit"
               disabled={isSubmitting}
               className={`${isSubmitting ? 'opacity-60 cursor-not-allowed' : ''} bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700`}
             >
-              {isSubmitting ? 'Guardando…' : 'Guardar'}
+              {isSubmitting ? 'Guardando… (generando contrato)' : 'Guardar'}
             </button>
           </div>
+
+          {isSubmitting && (
+            <div className="col-span-full text-xs opacity-80">
+              Procesando contrato y guardando jugador… no cierres esta pestaña 😄
+            </div>
+          )}
         </form>
 
         {mensaje && <p className="text-green-500 mt-4 text-center">{mensaje}</p>}
       </div>
+
+      {/* ✅ Modal "jugador creado" */}
+      <Modal
+        open={createdOpen}
+        onClose={() => setCreatedOpen(false)}
+        title="✅ Jugador creado"
+        darkMode={darkMode}
+      >
+        <div>
+          <div><b>Nombre:</b> {createdInfo.nombre}</div>
+          {createdInfo.id != null && <div><b>ID:</b> {createdInfo.id}</div>}
+
+          <div className="mt-2 opacity-80">
+            Contrato generado y almacenado en la base de datos.
+          </div>
+
+          {createdInfo.apoderadoCredencial && (
+            <div className="mt-2 text-xs opacity-90">
+              ✅ Apoderado habilitado para portal: credencial temporal creada con la clave RAFC2025!.
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }
