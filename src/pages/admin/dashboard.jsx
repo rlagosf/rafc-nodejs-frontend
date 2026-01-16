@@ -1,10 +1,10 @@
 // pages/admin/dashboard.jsx
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
-import { jwtDecode } from 'jwt-decode';
-import { useTheme } from '../../context/ThemeContext';
-import api from '../../services/api';
-import IsLoading from '../../components/isLoading';
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useNavigate, Outlet } from "react-router-dom";
+import { jwtDecode } from "jwt-decode";
+import { useTheme } from "../../context/ThemeContext";
+import api from "../../services/api";
+import IsLoading from "../../components/isLoading";
 import {
   LogOut,
   Sun,
@@ -16,47 +16,51 @@ import {
   CalendarPlus,
   History,
   Banknote,
-  PieChart,       // ✅ icono torta
+  PieChart, // ✅ icono torta
   UserCog,
   Settings,
   CalendarDays,
   Stethoscope,
-  Newspaper,      // ✅ NUEVO icono noticias
-  CreditCard
-} from 'lucide-react';
-import { useMobileAutoScrollTop } from '../../hooks/useMobileScrollTop';
+  Newspaper, // ✅ NUEVO icono noticias
+} from "lucide-react";
+import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
-const TOKEN_KEY = 'rafc_token';
+const TOKEN_KEY = "rafc_token";
 
 /* ───────────────── Helpers ───────────────── */
 const segToLabel = (seg) => {
   const map = {
-    '': 'Inicio',
-    'admin': 'Inicio',
-    'crear-jugador': 'Crear Jugador',
-    'listar-jugadores': 'Listar Jugadores',
-    'registrar-estadisticas': 'Registrar Estadísticas',
-    'detalle-estadisticas': 'Detalle Estadísticas',
-    'estadisticas': 'Estadísticas',
-    'convocatorias': 'Convocatorias',
-    'ver-convocaciones-historicas': 'Histórico Convocatorias',
-    'gestionar-pagos': 'Gestionar pagos',
-    'registrar-pagos': 'Ingresar pagos',
-    'powerbi-finanzas': 'POWER BI FINANCIERO', // ✅ label breadcrumb por URL (si la usas)
-    'power-bi': 'POWER BI FINANCIERO',         // ✅ por si tu ruta real es /admin/power-bi
-    'crear-usuario': 'Crear Usuario',
-    'configuracion': 'Configuración',
-    'agenda': 'Agenda',
-    'seguimiento-medico': 'Seguimiento médico',
-    'noticias': 'Registro Noticias',           // ✅ NUEVO breadcrumb
+    "": "Inicio",
+    "admin": "Inicio",
+    "crear-jugador": "Crear Jugador",
+    "listar-jugadores": "Listar Jugadores",
+    "registrar-estadisticas": "Registrar Estadísticas",
+    "detalle-estadisticas": "Detalle Estadísticas",
+    "estadisticas": "Estadísticas",
+    "convocatorias": "Convocatorias",
+    "ver-convocaciones-historicas": "Histórico Convocatorias",
+
+    // ✅ ÚNICO módulo de pagos
+    "gestionar-pagos": "Pagos centralizados",
+
+    "powerbi-finanzas": "POWER BI FINANCIERO",
+    "power-bi": "POWER BI FINANCIERO",
+
+    "crear-usuario": "Crear Usuario",
+    "configuracion": "Configuración",
+    "agenda": "Agenda",
+    "seguimiento-medico": "Seguimiento médico",
+    "noticias": "Registro Noticias",
   };
-  return map[seg] || (seg?.charAt(0).toUpperCase() + seg.slice(1).replaceAll('-', ' '));
+
+  return map[seg] || (seg?.charAt(0).toUpperCase() + seg.slice(1).replaceAll("-", " "));
 };
 
+
 const buildBreadcrumb = (pathname) => {
-  const parts = pathname.split('/').filter(Boolean);
+  const parts = pathname.split("/").filter(Boolean);
   const items = [];
-  let acc = '';
+  let acc = "";
   for (let i = 0; i < parts.length; i++) {
     acc += `/${parts[i]}`;
     items.push({
@@ -66,44 +70,49 @@ const buildBreadcrumb = (pathname) => {
     });
   }
   if (items.length === 0) {
-    items.push({ to: '/admin', label: 'Inicio', last: true });
+    items.push({ to: "/admin", label: "Inicio", last: true });
   }
   return items;
 };
 
 // Normaliza breadcrumbs cuando vienen desde location.state.breadcrumb
 const normalizeStateBreadcrumb = (stateBc = []) => {
-  const base = [{ to: '/admin', label: 'Inicio' }];
-  const merged = [...base, ...stateBc.map(b => ({ to: b.to, label: b.label }))];
+  const base = [{ to: "/admin", label: "Inicio" }];
+  const merged = [...base, ...stateBc.map((b) => ({ to: b.to, label: b.label }))];
   return merged.map((item, idx) => ({
     ...item,
-    last: idx === merged.length - 1
+    last: idx === merged.length - 1,
   }));
 };
 
 // Definición de tarjetas de acceso (con íconos)
 const cards = [
-  { to: '/admin/crear-jugador',                label: 'Crear Jugador',                       roles: [1],    Icon: UserPlus },
-  { to: '/admin/listar-jugadores',             label: 'Listar Jugadores',                    roles: [1, 2], Icon: Users },
-  { to: '/admin/registrar-estadisticas',       label: 'Registrar Estadísticas',              roles: [1, 2], Icon: ClipboardList },
-  { to: '/admin/estadisticas',                 label: 'Estadísticas Globales',               roles: [1, 2], Icon: BarChart3 },
-  { to: '/admin/convocatorias',                label: 'Crear Convocatorias',                 roles: [1],    Icon: CalendarPlus },
-  { to: '/admin/ver-convocaciones-historicas', label: 'Historial Convocatorias',             roles: [1, 2], Icon: History },
-  { to: '/admin/gestionar-pagos',              label: 'Pagos centralizados',                 roles: [1],    Icon: Banknote },
-  { to: '/admin/registrar-pago',               label: 'Ingresar pagos',                      roles: [1],    Icon: CreditCard },
+  { to: "/admin/crear-jugador", label: "Crear Jugador", roles: [1], Icon: UserPlus },
+  { to: "/admin/listar-jugadores", label: "Listar Jugadores", roles: [1, 2], Icon: Users },
+  { to: "/admin/registrar-estadisticas", label: "Registrar Estadísticas", roles: [1, 2], Icon: ClipboardList },
+  { to: "/admin/estadisticas", label: "Estadísticas Globales", roles: [1, 2], Icon: BarChart3 },
+  { to: "/admin/convocatorias", label: "Crear Convocatorias", roles: [1], Icon: CalendarPlus },
+  { to: "/admin/ver-convocaciones-historicas", label: "Historial Convocatorias", roles: [1, 2], Icon: History },
 
+  // ✅ ÚNICO acceso a pagos
+  { to: "/admin/gestionar-pagos", label: "Gestion de pagos", roles: [1], Icon: Banknote },
 
   // ✅ POWER BI
-  { to: '/admin/power-bi',                     label: 'POWER BI FINANCIERO',                 roles: [1],    Icon: PieChart },
+  { to: "/admin/power-bi", label: "POWER BI FINANCIERO", roles: [1], Icon: PieChart },
 
-  // ✅ NUEVO: Noticias
-  { to: '/admin/noticias',                     label: 'Registro Noticias',                   roles: [1],    Icon: Newspaper },
+  // ✅ Noticias
+  { to: "/admin/noticias", label: "Registro Noticias", roles: [1, 2], Icon: Newspaper },
 
-  { to: '/admin/crear-usuario',                label: 'Crear Usuario',                       roles: [1],    Icon: UserCog },
-  { to: '/admin/configuracion',                label: 'Configuración',                       roles: [1],    Icon: Settings },
-  { to: '/admin/agenda',                       label: 'Agenda de eventos',                   roles: [1, 2], Icon: CalendarDays },
+  { to: "/admin/crear-usuario", label: "Crear Usuario", roles: [1], Icon: UserCog },
+  { to: "/admin/configuracion", label: "Configuración", roles: [1], Icon: Settings },
+  { to: "/admin/agenda", label: "Agenda de eventos", roles: [1, 2], Icon: CalendarDays },
   {
-    to: '/admin/seguimiento-medico',           label: 'Seguimiento médico (próximamente)',   roles: [1, 2], Icon: Stethoscope, disabled: true,},
+    to: "/admin/seguimiento-medico",
+    label: "Seguimiento médico (próximamente)",
+    roles: [1, 2],
+    Icon: Stethoscope,
+    disabled: true,
+  },
 ];
 
 /* ───────────────── Component ───────────────── */
@@ -119,26 +128,27 @@ export default function Dashboard() {
     (async () => {
       try {
         let token = localStorage.getItem(TOKEN_KEY);
-        if (!token) return navigate('/login');
+        if (!token) return navigate("/login");
 
         let decoded = jwtDecode(token);
         if (!decoded?.exp || decoded.exp * 1000 < Date.now()) {
           try {
-            const r = await api.post('/auth/refresh');
+            const r = await api.post("/auth/refresh");
             token = r?.data?.access_token;
-            if (!token) throw new Error('no-refresh');
+            if (!token) throw new Error("no-refresh");
             localStorage.setItem(TOKEN_KEY, token);
             decoded = jwtDecode(token);
           } catch {
-            navigate('/login');
+            navigate("/login");
             return;
           }
         }
+
         const rawRol = decoded?.rol_id ?? decoded?.role_id ?? decoded?.role;
         const parsed = Number(rawRol);
         setRol(Number.isFinite(parsed) ? parsed : 0);
       } catch {
-        navigate('/login');
+        navigate("/login");
       } finally {
         setIsLoading(false);
       }
@@ -150,35 +160,31 @@ export default function Dashboard() {
   const handleCerrarSesion = async () => {
     const token = localStorage.getItem(TOKEN_KEY);
     try {
-      await api.post(
-        '/auth/logout',
-        null,
-        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
-      );
+      await api.post("/auth/logout", null, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
     } catch {
       // idempotente
     } finally {
-      try { localStorage.removeItem(TOKEN_KEY); } catch {}
-      window.location.replace('/');
+      try {
+        localStorage.removeItem(TOKEN_KEY);
+      } catch { }
+      window.location.replace("/");
     }
   };
 
   const bc = useMemo(() => {
     const stateBc = location.state?.breadcrumb;
-    if (Array.isArray(stateBc) && stateBc.length) {
-      return normalizeStateBreadcrumb(stateBc);
-    }
+    if (Array.isArray(stateBc) && stateBc.length) return normalizeStateBreadcrumb(stateBc);
     return buildBreadcrumb(location.pathname);
   }, [location.pathname, location.state]);
 
   if (isLoading || rol === null) return <IsLoading />;
 
-  const fondo = darkMode ? 'bg-[#111827] text-white' : 'bg-white text-[#1d0b0b]';
+  const fondo = darkMode ? "bg-[#111827] text-white" : "bg-white text-[#1d0b0b]";
   const cardBase = darkMode
-    ? 'bg-[#1f2937] border border-[#2b3341] hover:border-[#e82d89]'
-    : 'bg-white border border-[#eee] hover:border-[#e82d89]';
+    ? "bg-[#1f2937] border border-[#2b3341] hover:border-[#e82d89]"
+    : "bg-white border border-[#eee] hover:border-[#e82d89]";
 
-  const isRoot = location.pathname === '/admin';
+  const isRoot = location.pathname === "/admin";
 
   return (
     <div className={`${fondo} min-h-screen font-realacademy`}>
@@ -191,7 +197,9 @@ export default function Dashboard() {
                 {b.last ? (
                   <span className="font-semibold text-[#e82d89]">{b.label}</span>
                 ) : (
-                  <Link className="hover:text-[#e82d89]" to={b.to}>{b.label}</Link>
+                  <Link className="hover:text-[#e82d89]" to={b.to}>
+                    {b.label}
+                  </Link>
                 )}
               </li>
             ))}
@@ -206,6 +214,7 @@ export default function Dashboard() {
           >
             {darkMode ? <Sun size={20} /> : <Moon size={20} />}
           </button>
+
           <button
             title="Cerrar sesión"
             onClick={handleCerrarSesion}
@@ -222,9 +231,11 @@ export default function Dashboard() {
         {isRoot ? (
           <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {cards
-              .filter(c => !c.roles || c.roles.includes(rol))
+              .filter((c) => !c.roles || c.roles.includes(rol))
+              .sort((a, b) => (a.label || "").localeCompare(b.label || "", "es", { sensitivity: "base" }))
               .map(({ to, label, Icon, disabled }) => {
                 const commonClasses = `${cardBase} rounded-2xl p-6 shadow transition transform flex flex-col items-center justify-center gap-3 h-40`;
+
                 if (disabled) {
                   return (
                     <div
@@ -239,17 +250,14 @@ export default function Dashboard() {
                 }
 
                 return (
-                  <Link
-                    key={to}
-                    to={to}
-                    className={`${commonClasses} hover:-translate-y-1 hover:shadow-lg`}
-                  >
+                  <Link key={to} to={to} className={`${commonClasses} hover:-translate-y-1 hover:shadow-lg`}>
                     <Icon className="w-12 h-12 opacity-90" />
                     <div className="text-center font-semibold">{label}</div>
                   </Link>
                 );
               })}
           </div>
+
         ) : (
           <Outlet />
         )}

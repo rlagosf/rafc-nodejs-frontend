@@ -5,7 +5,7 @@ import { useTheme } from "../../context/ThemeContext";
 import api, { getToken, clearToken } from "../../services/api";
 import { jwtDecode } from "jwt-decode";
 import { formatRutWithDV } from "../../services/rut";
-import { Pencil, Trash2, X } from "lucide-react";
+import { Pencil, Trash2, X, CreditCard } from "lucide-react";
 import { useMobileAutoScrollTop } from "../../hooks/useMobileScrollTop";
 
 /* ─────────────────────────────
@@ -16,11 +16,11 @@ const TIPO_PAGO_MENSUALIDAD = 3;
 const SITUACION_PAGO_PAGADO_ID = 1; // Ajusta si tu catálogo usa otro ID
 
 /* ─────────────────────────────
-   HELPERS FETCH / NORMALIZACIÓN
+   HELPERS (MISMA LÓGICA detalleJugador.jsx)
 ───────────────────────────── */
-const normalizeListResponse = (res) => {
-  if (!res || res.status === 204) return [];
-  const d = res?.data;
+const asList = (raw) => {
+  if (!raw) return [];
+  const d = raw?.data ?? raw;
   if (Array.isArray(d)) return d;
   if (Array.isArray(d?.results)) return d.results;
   if (Array.isArray(d?.items)) return d.items;
@@ -31,14 +31,14 @@ const normalizeListResponse = (res) => {
 const tryGetList = async (paths, signal) => {
   const variants = [];
   for (const p of paths) {
-    if (p.endsWith("/")) variants.push(p, p.slice(0, -1));
-    else variants.push(p, `${p}/`);
+    variants.push(p.endsWith("/") ? p : `${p}/`);
+    variants.push(p.endsWith("/") ? p.slice(0, -1) : p);
   }
   const uniq = [...new Set(variants)];
   for (const url of uniq) {
     try {
       const r = await api.get(url, { signal });
-      return normalizeListResponse(r);
+      return asList(r);
     } catch (e) {
       const st = e?.response?.status;
       if (st === 401 || st === 403) throw e;
@@ -48,12 +48,30 @@ const tryGetList = async (paths, signal) => {
   return [];
 };
 
+// Igual que en detalleJugador: id + nombre/descripcion
+const normalizeCatalog = (arr) =>
+  (Array.isArray(arr) ? arr : [])
+    .map((x) => ({
+      id: Number(
+        x?.id ??
+          x?.posicion_id ??
+          x?.categoria_id ??
+          x?.establec_educ_id ??
+          x?.prevision_medica_id ??
+          x?.estado_id ??
+          x?.sucursal_id ??
+          x?.comuna_id
+      ),
+      nombre: String(x?.nombre ?? x?.descripcion ?? "").trim(),
+    }))
+    .filter((x) => Number.isFinite(x.id) && x.nombre);
+
 const buildIdNameMap = (arr, idKey = "id", nameKey = "nombre") => {
   const m = new Map();
-  for (const x of (Array.isArray(arr) ? arr : [])) {
+  for (const x of Array.isArray(arr) ? arr : []) {
     const id = x?.[idKey];
     const name = x?.[nameKey] ?? String(id ?? "—");
-    if (id != null) m.set(String(id), name);
+    if (id != null) m.set(String(id), String(name).trim());
   }
   return m;
 };
@@ -64,11 +82,7 @@ const normalizePagos = (arr, { tipoPagoMap, medioPagoMap, situacionPagoMap, juga
     const tipoId = p?.tipo_pago_id ?? p?.tipo_id ?? p?.tipoPagoId ?? p?.tipo_pago?.id ?? null;
     const medioId = p?.medio_pago_id ?? p?.medio_id ?? p?.medioPagoId ?? p?.medio_pago?.id ?? null;
     const situId =
-      p?.situacion_pago_id ??
-      p?.estado_pago_id ??
-      p?.estado_id ??
-      p?.situacion_pago?.id ??
-      null;
+      p?.situacion_pago_id ?? p?.estado_pago_id ?? p?.estado_id ?? p?.situacion_pago?.id ?? null;
 
     const rutPlano =
       p?.jugador_rut ??
@@ -90,11 +104,7 @@ const normalizePagos = (arr, { tipoPagoMap, medioPagoMap, situacionPagoMap, juga
       p?.nombre_jugador ??
       "—";
 
-    const catId =
-      jAnidado?.categoria?.id ??
-      jAnidado?.categoria_id ??
-      jFromMap?.categoria?.id ??
-      null;
+    const catId = jAnidado?.categoria?.id ?? jAnidado?.categoria_id ?? jFromMap?.categoria?.id ?? null;
 
     const catNombre =
       jAnidado?.categoria?.nombre ??
@@ -106,18 +116,18 @@ const normalizePagos = (arr, { tipoPagoMap, medioPagoMap, situacionPagoMap, juga
     const tipoNombre =
       p?.tipo_pago?.nombre ??
       p?.tipo_pago_nombre ??
-      (tipoId != null ? (tipoPagoMap.get(String(tipoId)) ?? String(tipoId)) : "—");
+      (tipoId != null ? tipoPagoMap.get(String(tipoId)) ?? String(tipoId) : "—");
 
     const medioNombre =
       p?.medio_pago?.nombre ??
       p?.medio_pago_nombre ??
-      (medioId != null ? (medioPagoMap.get(String(medioId)) ?? String(medioId)) : "—");
+      (medioId != null ? medioPagoMap.get(String(medioId)) ?? String(medioId) : "—");
 
     const situNombre =
       p?.situacion_pago?.nombre ??
       p?.estado_pago_nombre ??
       p?.estado_nombre ??
-      (situId != null ? (situacionPagoMap.get(String(situId)) ?? String(situId)) : "—");
+      (situId != null ? situacionPagoMap.get(String(situId)) ?? String(situId) : "—");
 
     const fecha = p?.fecha_pago ?? p?.fecha ?? null;
 
@@ -159,25 +169,44 @@ export default function ListarPagos() {
   const [situacionPagoMap, setSituacionPagoMap] = useState(new Map());
   const [jugadoresMap, setJugadoresMap] = useState(new Map());
 
-  // Filtros
+  // ✅ Catálogos normalizados al estilo detalleJugador
+  const [categoriasCat, setCategoriasCat] = useState([]); // opcional (por consistencia)
+  const [sucursalesCat, setSucursalesCat] = useState([]);
+
+  // Filtros pagos
   const [filtroTexto, setFiltroTexto] = useState("");
   const [filtroEstado, setFiltroEstado] = useState(""); // PAGADO / VENCIDO
   const [filtroTipoPago, setFiltroTipoPago] = useState(""); // id tipo_pago
   const [filtroCategoriaSel, setFiltroCategoriaSel] = useState("");
   const [filtroMedioPago, setFiltroMedioPago] = useState(""); // id medio_pago
 
-  // Paginación
+  // Paginación pagos
   const PAGE_SIZE = 10;
   const MAX_PAGES = 200;
   const [page, setPage] = useState(1);
+
+  // 🆕 Sección pagos manuales: filtro + paginación
+  const MANUAL_PAGE_SIZE = 10;
+  const [manualFiltro, setManualFiltro] = useState("");
+  const [manualPage, setManualPage] = useState(1);
 
   // Modal edición/registro
   const [editOpen, setEditOpen] = useState(false);
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState("");
+
+  // ✅ Modal de éxito + recarga visual
+  const [successOpen, setSuccessOpen] = useState(false);
+  const [successMsg, setSuccessMsg] = useState("");
+  const [reloadBusy, setReloadBusy] = useState(false);
+
   const [editForm, setEditForm] = useState({
     id: null,
-    virtual: false, // si es mensualidad vencida virtual -> crea pago (POST)
+
+    // flags
+    virtual: false, // mensualidad vencida virtual -> POST
+    create: false, // pago manual nuevo -> POST
+
     jugador_rut: "",
     monto: "",
     fecha_pago: "",
@@ -216,22 +245,17 @@ export default function ListarPagos() {
   }, [navigate]);
 
   // 🧭 Breadcrumb por defecto
-  // 🧭 Breadcrumb por defecto: Inicio / Pagos centralizados
   useEffect(() => {
     if (!Array.isArray(location.state?.breadcrumb)) {
       navigate(location.pathname + location.search, {
         replace: true,
         state: {
           ...(location.state || {}),
-          breadcrumb: [
-            { to: location.pathname, label: "Pagos centralizados" },
-          ],
+          breadcrumb: [{ to: location.pathname, label: "Pagos centralizados" }],
         },
       });
     }
   }, [location, navigate]);
-
-
 
   // 📡 Carga catálogos + jugadores + pagos
   useEffect(() => {
@@ -240,19 +264,41 @@ export default function ListarPagos() {
     (async () => {
       setIsLoading(true);
       setError("");
+
       try {
-        const [tipos, medios, situaciones, jugadoresList, categorias] = await Promise.all([
-          tryGetList(["/tipo-pago", "/tipo_pago"], abort.signal),
-          tryGetList(["/medio-pago", "/medio_pago"], abort.signal),
-          tryGetList(
-            ["/situacion-pago", "/situacion_pago", "/estado-pago", "/estado_pago"],
-            abort.signal
-          ),
-          tryGetList(["/jugadores"], abort.signal),
-          tryGetList(["/categorias"], abort.signal),
-        ]);
+        const [tipos, medios, situaciones, jugadoresList, categoriasRaw, sucursalesRaw] =
+          await Promise.all([
+            tryGetList(["/tipo-pago", "/tipo_pago"], abort.signal),
+            tryGetList(["/medio-pago", "/medio_pago"], abort.signal),
+            tryGetList(
+              ["/situacion-pago", "/situacion_pago", "/estado-pago", "/estado_pago"],
+              abort.signal
+            ),
+            tryGetList(["/jugadores"], abort.signal),
+            tryGetList(["/categorias"], abort.signal),
+
+            // ✅ MISMA ruta que tu detalleJugador.jsx
+            tryGetList(["/sucursales-real"], abort.signal),
+          ]);
 
         if (abort.signal.aborted) return;
+
+        // Maps catálogos pagos
+        const tipoMap = buildIdNameMap(tipos, "id", "nombre");
+        const medioMap = buildIdNameMap(medios, "id", "nombre");
+        const situMap = buildIdNameMap(situaciones, "id", "nombre");
+        setTipoPagoMap(tipoMap);
+        setMedioPagoMap(medioMap);
+        setSituacionPagoMap(situMap);
+
+        // ✅ Normalización estilo detalleJugador
+        const _categorias = normalizeCatalog(categoriasRaw);
+        const _sucursales = normalizeCatalog(sucursalesRaw);
+        setCategoriasCat(_categorias);
+        setSucursalesCat(_sucursales);
+
+        const catMap = new Map(_categorias.map((c) => [Number(c.id), c.nombre]));
+        const sucMap = new Map(_sucursales.map((s) => [Number(s.id), s.nombre]));
 
         // ✅ SOLO activos
         const activos = (Array.isArray(jugadoresList) ? jugadoresList : []).filter((j) => {
@@ -261,17 +307,7 @@ export default function ListarPagos() {
         });
         setJugadoresActivos(activos);
 
-        const tipoMap = buildIdNameMap(tipos, "id", "nombre");
-        const medioMap = buildIdNameMap(medios, "id", "nombre");
-        const situMap = buildIdNameMap(situaciones, "id", "nombre");
-
-        setTipoPagoMap(tipoMap);
-        setMedioPagoMap(medioMap);
-        setSituacionPagoMap(situMap);
-
-        const categoriasMap = buildIdNameMap(categorias, "id", "nombre");
-
-        // Map jugadores por rut para enriquecer pagos
+        // ✅ jugadoresMap enriquecido (incluye sucursal nombre usando sucMap)
         const jm = new Map();
         for (const j of activos) {
           const rut = j?.rut_jugador ?? j?.rut ?? null;
@@ -281,18 +317,28 @@ export default function ListarPagos() {
           const categoriaNombre =
             j?.categoria?.nombre ??
             j?.categoria_nombre ??
-            (categoriaId != null ? (categoriasMap.get(String(categoriaId)) ?? String(categoriaId)) : null) ??
-            j?.categoria ??
+            (categoriaId != null ? catMap.get(Number(categoriaId)) ?? String(categoriaId) : null) ??
+            (typeof j?.categoria === "string" ? j.categoria : null) ??
             "Sin categoría";
+
+          const sucursalId = j?.sucursal_id ?? j?.sucursal?.id ?? j?.id_sucursal ?? null;
+          const sucursalNombre =
+            j?.sucursal?.nombre ??
+            j?.sucursal_nombre ??
+            j?.nombre_sucursal ??
+            (sucursalId != null ? sucMap.get(Number(sucursalId)) : null) ??
+            (sucursalId != null ? `Sucursal ${sucursalId}` : null) ??
+            "Sin sucursal";
 
           jm.set(String(rut), {
             nombre: j?.nombre_jugador ?? j?.nombre ?? j?.nombre_completo ?? "—",
             categoria: { id: categoriaId, nombre: categoriaNombre },
+            sucursal: { id: sucursalId, nombre: sucursalNombre },
           });
         }
         setJugadoresMap(jm);
 
-        // Todos los pagos (estado de cuenta general)
+        // Pagos (estado cuenta)
         const respEstado = await api.get("/pagos-jugador/estado-cuenta", { signal: abort.signal });
         if (abort.signal.aborted) return;
 
@@ -301,7 +347,12 @@ export default function ListarPagos() {
         // ✅ Filtrar pagos solo de activos
         const rutsActivos = new Set(Array.from(jm.keys()));
         const rawPagosActivos = rawPagos.filter((p) => {
-          const rut = p?.jugador_rut ?? p?.rut_jugador ?? p?.rut ?? p?.jugador?.rut_jugador ?? p?.jugador?.rut;
+          const rut =
+            p?.jugador_rut ??
+            p?.rut_jugador ??
+            p?.rut ??
+            p?.jugador?.rut_jugador ??
+            p?.jugador?.rut;
           return rut != null && rutsActivos.has(String(rut));
         });
 
@@ -341,9 +392,11 @@ export default function ListarPagos() {
   const controlClase = `${controlBase} w-full h-10 px-3 rounded-md text-sm leading-none`;
 
   const toCLP = (n) =>
-    new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(
-      Number(n || 0)
-    );
+    new Intl.NumberFormat("es-CL", {
+      style: "currency",
+      currency: "CLP",
+      maximumFractionDigits: 0,
+    }).format(Number(n || 0));
 
   const estadoPillClass = (estadoRaw) => {
     const estado = (estadoRaw ?? "").toString().trim().toUpperCase();
@@ -357,8 +410,6 @@ export default function ListarPagos() {
   ───────────────────────────── */
   const filas = useMemo(() => {
     const rows = [];
-
-    // Para saber quién tiene mensualidad registrada (en cualquier estado)
     const tieneMensualidad = new Set();
 
     for (const p of pagos) {
@@ -395,7 +446,7 @@ export default function ListarPagos() {
       });
     }
 
-    // Crear filas virtuales vencidas para los activos SIN mensualidad
+    // Filas virtuales vencidas para los activos SIN mensualidad
     for (const [rut, j] of jugadoresMap.entries()) {
       if (!tieneMensualidad.has(String(rut))) {
         rows.push({
@@ -409,8 +460,15 @@ export default function ListarPagos() {
             id: null,
             monto: 0,
             fecha_pago: null,
-            jugador: { rut_jugador: String(rut), nombre_jugador: j?.nombre ?? "—", categoria: j?.categoria ?? null },
-            tipo_pago: { id: TIPO_PAGO_MENSUALIDAD, nombre: tipoPagoMap.get(String(TIPO_PAGO_MENSUALIDAD)) ?? "Mensualidad" },
+            jugador: {
+              rut_jugador: String(rut),
+              nombre_jugador: j?.nombre ?? "—",
+              categoria: j?.categoria ?? null,
+            },
+            tipo_pago: {
+              id: TIPO_PAGO_MENSUALIDAD,
+              nombre: tipoPagoMap.get(String(TIPO_PAGO_MENSUALIDAD)) ?? "Mensualidad",
+            },
             situacion_pago: { id: null, nombre: "VENCIDO" },
             medio_pago: { id: null, nombre: "—" },
             observaciones: "",
@@ -421,7 +479,6 @@ export default function ListarPagos() {
       }
     }
 
-    // Orden base: VENCIDO primero, luego por fecha desc
     const pesoEstado = (estadoRaw) => {
       const e = (estadoRaw ?? "").toString().toUpperCase();
       if (e === "VENCIDO") return 0;
@@ -439,7 +496,7 @@ export default function ListarPagos() {
     return rows;
   }, [pagos, jugadoresMap, tipoPagoMap]);
 
-  // Opciones filtros
+  // Opciones filtros pagos
   const opcionesTipoPago = useMemo(() => {
     const m = new Map();
     for (const r of filas) {
@@ -470,7 +527,7 @@ export default function ListarPagos() {
     return Array.from(m, ([value, label]) => ({ value, label }));
   }, [filas]);
 
-  // Filtros
+  // Filtros pagos
   const filasFiltradas = useMemo(() => {
     const f = (filtroTexto || "").toLowerCase().trim();
 
@@ -490,9 +547,7 @@ export default function ListarPagos() {
       }
 
       let okEstado = true;
-      if (filtroEstado) {
-        okEstado = (row.estado ?? "").toUpperCase() === filtroEstado.toUpperCase();
-      }
+      if (filtroEstado) okEstado = (row.estado ?? "").toUpperCase() === filtroEstado.toUpperCase();
 
       let okTipo = true;
       if (filtroTipoPago) {
@@ -501,9 +556,7 @@ export default function ListarPagos() {
       }
 
       let okCat = true;
-      if (filtroCategoriaSel) {
-        okCat = row.categoria === filtroCategoriaSel;
-      }
+      if (filtroCategoriaSel) okCat = row.categoria === filtroCategoriaSel;
 
       let okMedio = true;
       if (filtroMedioPago) {
@@ -520,15 +573,56 @@ export default function ListarPagos() {
     return Math.max(1, Math.min(tp, MAX_PAGES));
   }, [filasFiltradas]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [filtroTexto, filtroEstado, filtroTipoPago, filtroCategoriaSel, filtroMedioPago]);
+  useEffect(() => setPage(1), [filtroTexto, filtroEstado, filtroTipoPago, filtroCategoriaSel, filtroMedioPago]);
 
   const pageData = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
     const end = start + PAGE_SIZE;
     return filasFiltradas.slice(start, end);
   }, [filasFiltradas, page]);
+
+  /* ─────────────────────────────
+     Sección: jugadores para pagos manuales
+  ───────────────────────────── */
+  const jugadoresManualRows = useMemo(() => {
+    const f = (manualFiltro || "").toLowerCase().trim();
+
+    const rows = Array.from(jugadoresMap.entries()).map(([rut, j]) => ({
+      rut: String(rut),
+      nombre: j?.nombre ?? "—",
+      categoria: j?.categoria?.nombre ?? "Sin categoría",
+      sucursal: j?.sucursal?.nombre ?? "Sin sucursal",
+    }));
+
+    const filtrados = !f
+      ? rows
+      : rows.filter((r) => {
+          const rutFmt = formatRutWithDV(r.rut).toLowerCase();
+          return (
+            r.rut.includes(f) ||
+            rutFmt.includes(f) ||
+            r.nombre.toLowerCase().includes(f) ||
+            r.categoria.toLowerCase().includes(f) ||
+            r.sucursal.toLowerCase().includes(f)
+          );
+        });
+
+    filtrados.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    return filtrados;
+  }, [jugadoresMap, manualFiltro]);
+
+  const manualTotalPages = useMemo(() => {
+    const tp = Math.ceil(jugadoresManualRows.length / MANUAL_PAGE_SIZE);
+    return Math.max(1, Math.min(tp, 200));
+  }, [jugadoresManualRows]);
+
+  useEffect(() => setManualPage(1), [manualFiltro]);
+
+  const manualPageData = useMemo(() => {
+    const start = (manualPage - 1) * MANUAL_PAGE_SIZE;
+    const end = start + MANUAL_PAGE_SIZE;
+    return jugadoresManualRows.slice(start, end);
+  }, [jugadoresManualRows, manualPage]);
 
   /* ─────────────────────────────
      Acciones
@@ -541,25 +635,97 @@ export default function ListarPagos() {
 
     setEditError("");
     setEditForm({
-      id: isVirtual ? null : (pago?.id ?? null),
+      id: isVirtual ? null : pago?.id ?? null,
       virtual: isVirtual,
+      create: false,
+
       jugador_rut: row.rut,
       monto: pago?.monto ?? "",
       fecha_pago: pago?.fecha_pago ? String(pago.fecha_pago).slice(0, 10) : "",
-      tipo_pago_id: isVirtual ? String(TIPO_PAGO_MENSUALIDAD) : (pago?.tipo_pago?.id ? String(pago.tipo_pago.id) : ""),
+      tipo_pago_id: isVirtual
+        ? String(TIPO_PAGO_MENSUALIDAD)
+        : pago?.tipo_pago?.id
+        ? String(pago.tipo_pago.id)
+        : "",
       medio_pago_id: pago?.medio_pago?.id ? String(pago.medio_pago.id) : "",
       situacion_pago_id: isVirtual
-        ? String(SITUACION_PAGO_PAGADO_ID) // al pagar mensualidad vencida, pasa a PAGADO
-        : (pago?.situacion_pago?.id ? String(pago.situacion_pago.id) : ""),
+        ? String(SITUACION_PAGO_PAGADO_ID)
+        : pago?.situacion_pago?.id
+        ? String(pago.situacion_pago.id)
+        : "",
       observaciones: pago?.observaciones ?? "",
     });
 
     setEditOpen(true);
   };
 
+  const openManualPago = (rut) => {
+    const r = String(rut ?? "").trim();
+    if (!r) return;
+
+    setEditError("");
+    setEditForm({
+      id: null,
+      virtual: false,
+      create: true,
+
+      jugador_rut: r,
+      monto: "",
+      fecha_pago: "",
+      tipo_pago_id: "",
+      medio_pago_id: "",
+      situacion_pago_id: String(SITUACION_PAGO_PAGADO_ID),
+      observaciones: "",
+    });
+
+    setEditOpen(true);
+  };
+
   const closeEdit = () => {
-    if (editBusy) return;
+    if (editBusy || reloadBusy) return;
     setEditOpen(false);
+  };
+
+  const refetchPagosActivos = async () => {
+    const respEstado = await api.get("/pagos-jugador/estado-cuenta");
+    const rawPagos = Array.isArray(respEstado?.data?.pagos) ? respEstado.data.pagos : [];
+
+    const rutsActivos = new Set(Array.from(jugadoresMap.keys()));
+    const rawPagosActivos = rawPagos.filter((p) => {
+      const rut =
+        p?.jugador_rut ?? p?.rut_jugador ?? p?.rut ?? p?.jugador?.rut_jugador ?? p?.jugador?.rut;
+      return rut != null && rutsActivos.has(String(rut));
+    });
+
+    const pagosNorm = normalizePagos(rawPagosActivos, {
+      tipoPagoMap,
+      medioPagoMap,
+      situacionPagoMap,
+      jugadoresMap,
+    });
+
+    setPagos(pagosNorm);
+  };
+
+  // ✅ Éxito + “recarga” visual (isLoading)
+  const showSuccessAndReload = async (msg) => {
+    setSuccessMsg(msg);
+    setSuccessOpen(true);
+
+    // que se alcance a leer
+    await new Promise((r) => setTimeout(r, 900));
+
+    setSuccessOpen(false);
+
+    setReloadBusy(true);
+    setIsLoading(true);
+
+    try {
+      await refetchPagosActivos();
+    } finally {
+      setIsLoading(false);
+      setReloadBusy(false);
+    }
   };
 
   const submitEdit = async (e) => {
@@ -570,8 +736,8 @@ export default function ListarPagos() {
       return;
     }
 
-    // Si es virtual (vencido), forzar mensualidad + pagado
     const isVirtual = Boolean(editForm.virtual);
+    const isCreate = Boolean(editForm.create);
 
     const payload = {
       jugador_rut: editForm.jugador_rut,
@@ -595,46 +761,42 @@ export default function ListarPagos() {
       setEditError("Seleccione medio de pago");
       return;
     }
+    if (!payload.tipo_pago_id) {
+      setEditError("Seleccione tipo de pago");
+      return;
+    }
+    if (!payload.situacion_pago_id) {
+      setEditError("Seleccione situación");
+      return;
+    }
 
     setEditBusy(true);
     setEditError("");
 
     try {
-      if (isVirtual) {
-        // ✅ Registrar pago nuevo de mensualidad
+      // POST: manual o fila virtual
+      if (isVirtual || isCreate) {
         await api.post("/pagos-jugador", payload);
+        setEditOpen(false);
 
-        // Refrescar: recargar pagos (sin reload completo)
-        const respEstado = await api.get("/pagos-jugador/estado-cuenta");
-        const rawPagos = Array.isArray(respEstado?.data?.pagos) ? respEstado.data.pagos : [];
+        // ✅ mensaje distinto para dar “cache”
+        await showSuccessAndReload("Pago completado");
+        return;
+      }
 
-        // filtrar activos por map
-        const rutsActivos = new Set(Array.from(jugadoresMap.keys()));
-        const rawPagosActivos = rawPagos.filter((p) => {
-          const rut = p?.jugador_rut ?? p?.rut_jugador ?? p?.rut ?? p?.jugador?.rut_jugador ?? p?.jugador?.rut;
-          return rut != null && rutsActivos.has(String(rut));
-        });
+      // PUT: editar pago existente
+      if (!editForm.id) {
+        setEditError("ID de pago inválido");
+        return;
+      }
 
-        const pagosNorm = normalizePagos(rawPagosActivos, {
-          tipoPagoMap,
-          medioPagoMap,
-          situacionPagoMap,
-          jugadoresMap,
-        });
-        setPagos(pagosNorm);
-      } else {
-        if (!editForm.id) {
-          setEditError("ID de pago inválido");
-          return;
-        }
-        // ✅ Editar pago existente
-        await api.put(`/pagos-jugador/${editForm.id}`, payload);
+      await api.put(`/pagos-jugador/${editForm.id}`, payload);
 
-        // actualizar localmente (sin refetch total)
-        setPagos((prev) =>
-          prev.map((p) =>
-            p.id === editForm.id
-              ? {
+      // (opcional) actualización local rápida, pero igual recargaremos por consistencia
+      setPagos((prev) =>
+        prev.map((p) =>
+          p.id === editForm.id
+            ? {
                 ...p,
                 monto: Number(payload.monto),
                 fecha_pago: payload.fecha_pago,
@@ -652,12 +814,13 @@ export default function ListarPagos() {
                 },
                 observaciones: payload.observaciones ?? "",
               }
-              : p
-          )
-        );
-      }
+            : p
+        )
+      );
 
       setEditOpen(false);
+      await showSuccessAndReload("Registro actualizado");
+      return;
     } catch (err) {
       setEditError(err?.response?.data?.message || err?.message || "No se pudo guardar el pago");
     } finally {
@@ -686,7 +849,7 @@ export default function ListarPagos() {
   if (isLoading) {
     return (
       <div className={`${fondoClase} min-h-[calc(100vh-100px)] px-4 pt-4 pb-16 flex items-center justify-center`}>
-        <p className="opacity-80 text-sm">Cargando pagos centralizados…</p>
+        <p className="opacity-80 text-sm">{reloadBusy ? "Actualizando información…" : "Cargando pagos centralizados…"}</p>
       </div>
     );
   }
@@ -703,12 +866,12 @@ export default function ListarPagos() {
     <div className={`${fondoClase} min-h-[calc(100vh-100px)] px-4 pt-4 pb-16 font-realacademy`}>
       <h2 className="text-2xl font-bold mb-2 text-center">Pagos Centralizados</h2>
       <p className="text-center mb-6 text-xs sm:text-sm opacity-80">
-        Vista consolidada de pagos de jugadores <span className="font-semibold">ACTIVOS</span>. Además,
-        se agregan filas virtuales de <span className="font-semibold">Mensualidad VENCIDA</span> cuando
-        el jugador no tiene mensualidad registrada.
+        Vista consolidada de pagos de jugadores <span className="font-semibold">ACTIVOS</span>. Además, se agregan filas
+        virtuales de <span className="font-semibold">Mensualidad VENCIDA</span> cuando el jugador no tiene mensualidad
+        registrada.
       </p>
 
-      {/* Filtros */}
+      {/* Filtros pagos */}
       <div className="mb-4 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-3 items-end max-w-6xl mx-auto">
         <input
           type="text"
@@ -756,7 +919,7 @@ export default function ListarPagos() {
         </select>
       </div>
 
-      {/* Tabla */}
+      {/* Tabla pagos */}
       <div className="w-full overflow-x-auto">
         <table className="w-full text-xs sm:text-sm min-w-[1100px]">
           <thead className={tablaCabecera}>
@@ -776,17 +939,11 @@ export default function ListarPagos() {
           <tbody>
             {pageData.map((row) => {
               const pago = row.pago;
-
               return (
                 <tr key={row.key} className={filaHover}>
-                  <td className="py-2 px-4 border text-center">
-                    {row.rut ? formatRutWithDV(row.rut) : "—"}
-                  </td>
-
+                  <td className="py-2 px-4 border text-center">{row.rut ? formatRutWithDV(row.rut) : "—"}</td>
                   <td className="py-2 px-4 border text-center break-all">{row.nombre}</td>
-
                   <td className="py-2 px-4 border text-center break-all">{row.categoria}</td>
-
                   <td className="py-2 px-4 border text-center break-all">{pago?.tipo_pago?.nombre ?? "—"}</td>
 
                   <td className="py-2 px-4 border text-center">
@@ -813,6 +970,7 @@ export default function ListarPagos() {
                         onClick={() => openEdit(row)}
                         className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50"
                         title={row.virtual ? "Registrar pago de mensualidad" : "Editar pago"}
+                        disabled={reloadBusy}
                       >
                         <Pencil size={18} />
                       </button>
@@ -821,7 +979,7 @@ export default function ListarPagos() {
                         onClick={() => removePago(row)}
                         className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50"
                         title={row.virtual ? "No se puede eliminar (fila virtual)" : "Eliminar pago"}
-                        disabled={row.virtual || !pago?.id}
+                        disabled={reloadBusy || row.virtual || !pago?.id}
                       >
                         <Trash2 size={18} color="#D32F2F" />
                       </button>
@@ -842,14 +1000,15 @@ export default function ListarPagos() {
         </table>
       </div>
 
-      {/* Paginación */}
+      {/* Paginación pagos */}
       <div className="flex flex-col items-center justify-center gap-2 mt-4">
         <div className="flex items-center justify-center gap-2">
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
-            className={`px-3 py-1 rounded border ${page <= 1 ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-100 dark:hover:bg-[#111827]"
-              }`}
+            disabled={reloadBusy || page <= 1}
+            className={`px-3 py-1 rounded border ${
+              page <= 1 || reloadBusy ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-100 dark:hover:bg-[#111827]"
+            }`}
           >
             Anterior
           </button>
@@ -860,9 +1019,12 @@ export default function ListarPagos() {
 
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
-            className={`px-3 py-1 rounded border ${page >= totalPages ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-100 dark:hover:bg-[#111827]"
-              }`}
+            disabled={reloadBusy || page >= totalPages}
+            className={`px-3 py-1 rounded border ${
+              page >= totalPages || reloadBusy
+                ? "opacity-50 cursor-not-allowed"
+                : "hover:bg-gray-100 dark:hover:bg-[#111827]"
+            }`}
           >
             Siguiente
           </button>
@@ -874,15 +1036,131 @@ export default function ListarPagos() {
         </div>
       </div>
 
+      {/* ─────────────────────────────
+          NUEVA SECCIÓN: INGRESAR PAGOS MANUALES
+        ───────────────────────────── */}
+      <div className="max-w-6xl mx-auto mt-10">
+        <h3 className="text-xl font-bold text-center">INGRESAR PAGOS MANUALES</h3>
+        <p className="text-center mt-1 mb-4 text-xs sm:text-sm opacity-80">
+          Acá se pueden realizar pagos en forma manual. Se listan{" "}
+          <span className="font-semibold">solo jugadores activos</span> (estado_id = 1).
+        </p>
+
+        <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
+          <input
+            type="text"
+            placeholder="Buscar por RUT, nombre, categoría o sucursal"
+            value={manualFiltro}
+            onChange={(e) => setManualFiltro(e.target.value)}
+            className={controlClase}
+          />
+          <div className="text-xs opacity-80 md:text-right">
+            Total jugadores activos: <span className="font-semibold">{jugadoresManualRows.length}</span>
+          </div>
+        </div>
+
+        <div className="w-full overflow-x-auto">
+          <table className="w-full text-xs sm:text-sm min-w-[1100px]">
+            <thead className={tablaCabecera}>
+              <tr>
+                <th className="py-2 px-4 border min-w-[120px]">RUT Jugador</th>
+                <th className="py-2 px-4 border min-w-[260px]">Nombre del jugador</th>
+                <th className="py-2 px-4 border min-w-[180px]">Categoría</th>
+                <th className="py-2 px-4 border min-w-[180px]">Sucursal</th>
+                <th className="py-2 px-4 border min-w-[140px] text-center">Acciones</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {manualPageData.map((j) => (
+                <tr key={`MANUAL-${j.rut}`} className={filaHover}>
+                  <td className="py-2 px-4 border text-center">{formatRutWithDV(j.rut)}</td>
+                  <td className="py-2 px-4 border text-center break-all">{j.nombre}</td>
+                  <td className="py-2 px-4 border text-center break-all">{j.categoria}</td>
+                  <td className="py-2 px-4 border text-center break-all">{j.sucursal}</td>
+                  <td className="py-2 px-4 border text-center">
+                    <button
+                      onClick={() => openManualPago(j.rut)}
+                      disabled={reloadBusy}
+                      className="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded bg-[#e82d89] text-white hover:bg-pink-700 disabled:opacity-50"
+                      title="Ingresar pago manual"
+                    >
+                      <CreditCard size={16} />
+                      Ingresar pago
+                    </button>
+                  </td>
+                </tr>
+              ))}
+
+              {manualPageData.length === 0 && (
+                <tr>
+                  <td className="py-4 px-4 border text-center" colSpan={5}>
+                    No hay jugadores que coincidan con el filtro.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* paginación manual */}
+        <div className="flex flex-col items-center justify-center gap-2 mt-4">
+          <div className="flex items-center justify-center gap-2">
+            <button
+              onClick={() => setManualPage((p) => Math.max(1, p - 1))}
+              disabled={reloadBusy || manualPage <= 1}
+              className={`px-3 py-1 rounded border ${
+                manualPage <= 1 || reloadBusy
+                  ? "opacity-50 cursor-not-allowed"
+                  : "hover:bg-gray-100 dark:hover:bg-[#111827]"
+              }`}
+            >
+              Anterior
+            </button>
+
+            <span className="px-2">
+              Página {manualPage} de {manualTotalPages}
+            </span>
+
+            <button
+              onClick={() => setManualPage((p) => Math.min(manualTotalPages, p + 1))}
+              disabled={reloadBusy || manualPage >= manualTotalPages}
+              className={`px-3 py-1 rounded border ${
+                manualPage >= manualTotalPages || reloadBusy
+                  ? "opacity-50 cursor-not-allowed"
+                  : "hover:bg-gray-100 dark:hover:bg-[#111827]"
+              }`}
+            >
+              Siguiente
+            </button>
+          </div>
+
+          <div className="text-xs opacity-80">
+            Mostrando <span className="font-semibold">{manualPageData.length}</span> de{" "}
+            <span className="font-semibold">{jugadoresManualRows.length}</span> jugadores filtrados.
+          </div>
+        </div>
+      </div>
+
       {/* Modal Edición / Registro */}
       {editOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className={`${darkMode ? "bg-[#1f2937] text-white" : "bg-white"} w-[95%] max-w-2xl rounded-lg p-5 shadow-lg`}>
+          <div
+            className={`${darkMode ? "bg-[#1f2937] text-white" : "bg-white"} w-[95%] max-w-2xl rounded-lg p-5 shadow-lg`}
+          >
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-semibold">
-                {editForm.virtual ? `Registrar mensualidad (VENCIDO) - ${formatRutWithDV(editForm.jugador_rut)}` : `Editar pago #${editForm.id}`}
+                {editForm.virtual
+                  ? `Registrar mensualidad (VENCIDO) - ${formatRutWithDV(editForm.jugador_rut)}`
+                  : editForm.create
+                  ? `Ingresar pago manual - ${formatRutWithDV(editForm.jugador_rut)}`
+                  : `Editar pago #${editForm.id}`}
               </h3>
-              <button className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10" onClick={closeEdit} disabled={editBusy}>
+              <button
+                className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50"
+                onClick={closeEdit}
+                disabled={editBusy || reloadBusy}
+              >
                 <X size={18} />
               </button>
             </div>
@@ -892,13 +1170,7 @@ export default function ListarPagos() {
             <form onSubmit={submitEdit} className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs mb-1 opacity-80">RUT Jugador</label>
-                <input
-                  type="text"
-                  value={formatRutWithDV(editForm.jugador_rut)}
-                  className={controlClase}
-                  disabled
-                  title="No editable"
-                />
+                <input type="text" value={formatRutWithDV(editForm.jugador_rut)} className={controlClase} disabled />
               </div>
 
               <div>
@@ -909,6 +1181,7 @@ export default function ListarPagos() {
                   onChange={(e) => setEditForm((f) => ({ ...f, monto: e.target.value }))}
                   className={controlClase}
                   required
+                  disabled={editBusy || reloadBusy}
                 />
               </div>
 
@@ -920,10 +1193,10 @@ export default function ListarPagos() {
                   onChange={(e) => setEditForm((f) => ({ ...f, fecha_pago: e.target.value }))}
                   className={controlClase}
                   required
+                  disabled={editBusy || reloadBusy}
                 />
               </div>
 
-              {/* Si es virtual, bloqueamos tipo/situación (mensualidad/pagado) */}
               <div>
                 <label className="block text-xs mb-1 opacity-80">Tipo de pago</label>
                 <select
@@ -931,7 +1204,7 @@ export default function ListarPagos() {
                   onChange={(e) => setEditForm((f) => ({ ...f, tipo_pago_id: e.target.value }))}
                   className={controlClase}
                   required
-                  disabled={editForm.virtual}
+                  disabled={editForm.virtual || editBusy || reloadBusy}
                 >
                   <option value="">Seleccione…</option>
                   {Array.from(tipoPagoMap, ([value, label]) => (
@@ -949,6 +1222,7 @@ export default function ListarPagos() {
                   onChange={(e) => setEditForm((f) => ({ ...f, medio_pago_id: e.target.value }))}
                   className={controlClase}
                   required
+                  disabled={editBusy || reloadBusy}
                 >
                   <option value="">Seleccione…</option>
                   {Array.from(medioPagoMap, ([value, label]) => (
@@ -966,7 +1240,7 @@ export default function ListarPagos() {
                   onChange={(e) => setEditForm((f) => ({ ...f, situacion_pago_id: e.target.value }))}
                   className={controlClase}
                   required
-                  disabled={editForm.virtual}
+                  disabled={editForm.virtual || editBusy || reloadBusy}
                 >
                   <option value="">Seleccione…</option>
                   {Array.from(situacionPagoMap, ([value, label]) => (
@@ -975,9 +1249,11 @@ export default function ListarPagos() {
                     </option>
                   ))}
                 </select>
+
                 {editForm.virtual && (
                   <p className="text-[11px] opacity-70 mt-1">
-                    Esta fila es mensualidad vencida: al guardar se registrará como <span className="font-semibold">PAGADO</span>.
+                    Esta fila es mensualidad vencida: al guardar se registrará como{" "}
+                    <span className="font-semibold">PAGADO</span>.
                   </p>
                 )}
               </div>
@@ -989,6 +1265,7 @@ export default function ListarPagos() {
                   onChange={(e) => setEditForm((f) => ({ ...f, observaciones: e.target.value }))}
                   className={`${controlBase} w-full min-h-[80px] rounded-md p-3 text-sm`}
                   placeholder="Opcional"
+                  disabled={editBusy || reloadBusy}
                 />
               </div>
 
@@ -996,20 +1273,37 @@ export default function ListarPagos() {
                 <button
                   type="button"
                   onClick={closeEdit}
-                  disabled={editBusy}
+                  disabled={editBusy || reloadBusy}
                   className="px-3 py-1 rounded border hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  disabled={editBusy}
+                  disabled={editBusy || reloadBusy}
                   className="px-3 py-1 rounded bg-[#e82d89] text-white hover:bg-pink-700 disabled:opacity-50"
                 >
                   {editBusy ? "Guardando…" : "Guardar cambios"}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ Modal de éxito */}
+      {successOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60">
+          <div
+            className={`${
+              darkMode ? "bg-[#1f2937] text-white" : "bg-white text-[#1d0b0b]"
+            } w-[92%] max-w-sm rounded-xl p-6 shadow-2xl border border-[#e82d89]`}
+          >
+            <div className="text-center">
+              <div className="text-4xl mb-2">✅</div>
+              <h4 className="text-lg font-extrabold mb-1">{successMsg}</h4>
+              <p className="text-xs opacity-80">Actualizando información…</p>
+            </div>
           </div>
         </div>
       )}
